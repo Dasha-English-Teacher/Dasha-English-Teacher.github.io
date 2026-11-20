@@ -13,7 +13,8 @@ Everything runs on free services: GitHub Pages (the website), Supabase (the data
 
 - **Website:** https://dasha-english-teacher.github.io (this repository, published with GitHub Pages).
 - **Database:** Supabase project **english-studio** in the organization *English with Dasha* (free plan). Sign in to Supabase with Dasha's GitHub account. Email confirmation is turned off, and the site address is set under *Authentication → URL Configuration*.
-- **Booking page:** Cal.com event **Trial lesson** (30 minutes): https://cal.com/darya-kim-jb6d3n/trial-lesson. Still to do in Cal.com: set the real teaching hours (*Availability*) and connect Google Calendar (*Apps → Calendar*) so busy times are hidden.
+- **Booking page:** Cal.com event **Trial lesson** (30 minutes): https://cal.com/dasha-teacher/trial-lesson. Still to do in Cal.com: set the real teaching hours (*Availability*) and connect Google Calendar (*Apps → Calendar*) so busy times are hidden.
+  **If you change the Cal.com username or the event link, also update *Booking page link* on the website's Website page.** Otherwise the booking calendar shows "404, this page does not exist".
 - **Notifications:** sent to the email on the website's *Website* page.
 
 Steps 1, 2 and 5 below are already done. They stay here in case you ever need to set things up again.
