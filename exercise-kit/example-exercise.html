@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Example: contrast linkers</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #1c2a44; line-height: 1.6; }
+  .q { padding: 12px 0; border-bottom: 1px solid #e3e8f0; }
+  select { font: inherit; padding: 4px 8px; }
+  .ok { color: #1a7f52; } .no { color: #c23a52; }
+  button { font: inherit; padding: 10px 16px; margin-right: 8px; cursor: pointer; }
+  #score { font-weight: 600; margin-top: 16px; }
+</style>
+</head>
+<body>
+<h1>Contrast linkers</h1>
+<p>Choose the best word for each sentence, then press <strong>Check answers</strong>.</p>
+<div id="items"></div>
+<p><button id="check">Check answers</button><button id="show">Show answers</button></p>
+<p id="score"></p>
+
+<!-- 1. This line lets the exercise report its score to the website. -->
+<script src="https://dasha-english-teacher.github.io/assets/report.js"></script>
+<script>
+  const items = [
+    { before: '', after: ' the rain, we went for a walk.', options: ['Despite', 'Although', 'Whereas'], answer: 'Despite' },
+    { before: 'She stayed late ', after: ' she was exhausted.', options: ['despite', 'even though', 'nevertheless'], answer: 'even though' },
+    { before: 'He loves cities, ', after: ' his sister prefers the countryside.', options: ['whereas', 'despite', 'in spite of'], answer: 'whereas' },
+  ];
+  const box = document.getElementById('items');
+  items.forEach((it, i) => {
+    const div = document.createElement('div');
+    div.className = 'q';
+    div.innerHTML = `${i + 1}. ${it.before}<select id="s${i}"><option value="">Choose…</option>${it.options.map((o) => `<option>${o}</option>`).join('')}</select>${it.after} <span id="r${i}"></span>`;
+    box.append(div);
+  });
+
+  document.getElementById('check').addEventListener('click', () => {
+    let correct = 0;
+    const answers = items.map((it, i) => {
+      const value = document.getElementById('s' + i).value;
+      const ok = value === it.answer;
+      if (ok) correct++;
+      const mark = document.getElementById('r' + i);
+      mark.textContent = ok ? '✓' : '✗';
+      mark.className = ok ? 'ok' : 'no';
+      return { q: `${it.before}___${it.after}`, a: value, ok };
+    });
+    document.getElementById('score').textContent = `Score: ${correct} / ${items.length}`;
+    // 2. Tell the website the score (and the answers).
+    if (window.reportResult) reportResult(correct, items.length, answers);
+  });
+
+  document.getElementById('show').addEventListener('click', () => {
+    // 3. Tell the website the student opened the answer key.
+    if (window.reportAnswerKeyShown) reportAnswerKeyShown();
+    items.forEach((it, i) => { document.getElementById('s' + i).value = it.answer; });
+  });
+</script>
+</body>
+</html>
