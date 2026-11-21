@@ -10,5 +10,9 @@ window.SITE_CONFIG = {
   supabaseUrl: 'https://membertqugfwotwnzjaz.supabase.co',
   supabaseKey: 'sb_publishable_0WclXuOH7zAYUCgLGayJCw_ps69HilD',
   // Where the demo finds its sample exercises (used only in demo mode).
+  // Her own domain (set in GitHub -> Settings -> Pages) and the GitHub Pages
+  // address it replaces. Exercise links on the old address are opened on the domain.
+  customDomain: 'dashaenglish.com',
+  githubPagesHost: 'dasha-english-teacher.github.io',
   demoExerciseBase: 'https://dasha-english-teacher.github.io/miro-exercises/',
 };

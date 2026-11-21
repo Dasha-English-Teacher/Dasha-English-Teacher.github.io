@@ -1,6 +1,6 @@
 // Exercise player: shows one exercise full-screen, follows the score, saves the work.
 import { html, icon, toast, openModal, duration, esc } from './ui.js';
-import { S, go, isTeacher, findMaterial, teacherName, notifyTeacher, siteUrl } from './core.js';
+import { S, go, isTeacher, findMaterial, teacherName, notifyTeacher, siteUrl, siteAddress } from './core.js';
 import { createTracker } from './tracker.js';
 
 export async function playView({ id }) {
@@ -130,10 +130,10 @@ export async function playView({ id }) {
           ${teacher ? html`<span class="chip chip-note">Preview, results are not saved</span>` : html`
             <span class="chip" id="play-score">Not started</span>
             <span class="player-time" title="Time on this exercise">${icon('clock')}<span id="play-time">0 s</span></span>`}
-          <a class="icon-btn hide-sm" href="${material.url}" target="_blank" rel="noopener" aria-label="Open in a new tab" title="Open in a new tab">${icon('external')}</a>
+          <a class="icon-btn hide-sm" href="${siteAddress(material.url)}" target="_blank" rel="noopener" aria-label="Open in a new tab" title="Open in a new tab">${icon('external')}</a>
           ${teacher ? '' : html`<button class="btn btn-primary" data-on="finish">${icon('check')} Finish</button>`}
         </header>
-        <iframe id="exercise-frame" class="player-frame" src="${material.url}" title="${material.title}" allow="autoplay; clipboard-write; fullscreen"></iframe>
+        <iframe id="exercise-frame" class="player-frame" src="${siteAddress(material.url)}" title="${material.title}" allow="autoplay; clipboard-write; fullscreen"></iframe>
       </div>`,
     on: { finish: () => finishDialog() },
     mount() {

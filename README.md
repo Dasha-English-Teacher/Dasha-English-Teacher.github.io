@@ -11,7 +11,8 @@ Everything runs on free services: GitHub Pages (the website), Supabase (the data
 
 ## Current setup
 
-- **Website:** https://dasha-english-teacher.github.io (this repository, published with GitHub Pages).
+- **Website:** https://dashaenglish.com (this repository, published with GitHub Pages). The old address https://dasha-english-teacher.github.io redirects there.
+- **Domain:** dashaenglish.com, registered at Porkbun (account `dashakim`), renews 2027-11-21. DNS at Porkbun: ALIAS `dashaenglish.com` and CNAME `www` both point to `dasha-english-teacher.github.io`; a TXT record `_github-pages-challenge-Dasha-English-Teacher` proves to GitHub that the domain is hers. Do not delete these records.
 - **Database:** Supabase project **english-studio** in the organization *English with Dasha* (free plan). Sign in to Supabase with Dasha's GitHub account. Email confirmation is turned off, and the site address is set under *Authentication → URL Configuration*.
 - **Booking page:** Cal.com event **Trial lesson** (30 minutes): https://cal.com/dasha-teacher/trial-lesson. Still to do in Cal.com: set the real teaching hours (*Availability*) and connect Google Calendar (*Apps → Calendar*) so busy times are hidden.
   **If you change the Cal.com username or the event link, also update *Booking page link* on the website's Website page.** Otherwise the booking calendar shows "404, this page does not exist".
@@ -81,7 +82,7 @@ New people then pick a time themselves, and it goes straight into your Google Ca
 
 ## How exercises report results
 
-The website reads the score your exercises already show, such as "Score: 12 / 18", "12 / 27 correct" or "All 15 correct", and collects what the student chose or typed. This works because your exercises and the website live on the same address (`dasha-english-teacher.github.io`). Keep your exercises in a repository of the Dasha-English-Teacher account and they will work.
+The website reads the score your exercises already show, such as "Score: 12 / 18", "12 / 27 correct" or "All 15 correct", and collects what the student chose or typed. This works because your exercises and the website live on the same address (`dashaenglish.com`; exercises in any repository of the Dasha-English-Teacher account are served there too, for example `dashaenglish.com/miro-exercises/...`). Keep your exercises in a repository of the Dasha-English-Teacher account and they will work.
 
 For new exercises, add the sentence from `exercise-kit/AI-PROMPT.md` to your request to the AI. The exercise then reports its score directly, which is the most reliable way.
 

@@ -146,7 +146,18 @@ export function youtubeId(url) {
 function pagesUrl(owner, repo, path) {
   const host = `${owner.toLowerCase()}.github.io`;
   const encoded = path.split('/').map(encodeURIComponent).join('/');
-  return repo.toLowerCase() === host ? `https://${host}/${encoded}` : `https://${host}/${repo}/${encoded}`;
+  return siteAddress(repo.toLowerCase() === host ? `https://${host}/${encoded}` : `https://${host}/${repo}/${encoded}`);
+}
+
+// Her exercises live under her GitHub Pages address, which now redirects to
+// her own domain. Use the domain directly so the page and the exercise stay
+// on the same address (needed to read scores) and skip the redirect.
+export function siteAddress(url) {
+  const domain = S.cfg && S.cfg.customDomain;
+  const from = S.cfg && S.cfg.githubPagesHost;
+  if (!domain || !from || !url) return url;
+  if (location.hostname !== domain) return url;
+  return String(url).replace(new RegExp(`^https?://${from.replace(/\./g, '\\.')}/`, 'i'), `https://${domain}/`);
 }
 
 async function listRepo(spec) {
