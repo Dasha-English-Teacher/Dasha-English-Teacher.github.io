@@ -1,44 +1,48 @@
 // Main file: starts the app, decides which page to show, draws the menu.
 import { html, icon, wire, toast, openModal, closeAllModals, showError, setTimeFormat, initials, esc } from './ui.js';
 import { createApi } from './api.js';
-import { S, setRerender, go, refresh, isTeacher } from './core.js';
+import { S, setRerender, go, refresh, isTeacher, loadNav, invalidateNav, money, priceOf, balanceLevel } from './core.js';
 import * as pub from './views-public.js';
 import * as stu from './views-student.js';
 import * as tea from './views-teacher.js';
+import * as bill from './views-billing.js';
 import { playView } from './player.js';
 
 const ROUTES = {
-  public: { home: pub.homeView, book: pub.bookView, login: pub.loginView, signup: pub.signupView, join: pub.joinView },
-  waiting: { home: pub.homeView, book: pub.bookView, account: pub.waitingView },
+  public: { home: pub.homeView, book: pub.bookView, pay: bill.payView, login: pub.loginView, signup: pub.signupView, join: pub.joinView },
+  waiting: { home: pub.homeView, book: pub.bookView, pay: bill.payView, account: pub.waitingView },
   student: {
-    classes: stu.classesView, class: stu.classView, lesson: stu.lessonView, play: playView,
+    programs: stu.programsView, program: stu.programView, lesson: stu.lessonView, play: playView,
     schedule: stu.scheduleView, words: stu.wordsView, results: stu.resultsView, result: stu.resultView,
-    'my-profile': stu.profileView, book: pub.bookView, home: pub.homeView,
+    'my-profile': stu.profileView, pay: bill.payView, book: pub.bookView, home: pub.homeView,
   },
   teacher: {
-    today: tea.todayView, students: tea.studentsView, student: tea.studentView,
-    'class-editor': tea.classEditorView, 'edit-class': tea.editClassView, library: tea.libraryView,
+    today: tea.todayView, students: tea.studentsView, student: tea.studentView, payments: bill.paymentsView,
+    programs: tea.programEditorView, 'edit-program': tea.editProgramView, library: tea.libraryView,
     reviews: tea.reviewsView, review: tea.reviewView, calendar: tea.calendarView, requests: tea.requestsView,
     'site-setup': tea.siteSetupView, 'my-profile': stu.profileView,
-    class: stu.classView, lesson: stu.lessonView, play: playView, book: pub.bookView, home: pub.homeView,
+    program: stu.programView, lesson: stu.lessonView, play: playView, book: pub.bookView, pay: bill.payView, home: pub.homeView,
   },
 };
-const DEFAULT = { public: 'home', waiting: 'account', student: 'classes', teacher: 'today' };
-const KNOWN = [...new Set(Object.values(ROUTES).flatMap((r) => Object.keys(r)))].sort((a, b) => b.length - a.length);
+// Old addresses (before "classes" were renamed "programs") keep working.
+const ALIASES = { classes: 'programs', class: 'program', 'class-editor': 'programs', 'edit-class': 'edit-program' };
+const DEFAULT = { public: 'home', waiting: 'account', student: 'programs', teacher: 'today' };
+const KNOWN = [...new Set([...Object.values(ROUTES).flatMap((r) => Object.keys(r)), ...Object.keys(ALIASES)])].sort((a, b) => b.length - a.length);
 
 const NAV = {
   student: [
-    ['classes', 'My classes', 'book', ['class', 'lesson', 'play']],
+    ['programs', 'My programs', 'book', ['program', 'lesson', 'play']],
     ['schedule', 'Schedule', 'calendar'],
-    ['words', 'My words', 'words'],
     ['results', 'Results', 'star', ['result']],
-    ['my-profile', 'Profile', 'user'],
+    ['words', 'My words', 'words'],
+    ['my-profile', 'Profile and balance', 'user', ['pay']],
   ],
   teacher: [
     ['today', 'Today', 'home'],
     ['students', 'Students', 'users', ['student']],
-    ['class-editor', 'Classes', 'book', ['edit-class', 'class', 'lesson', 'play']],
+    ['programs', 'Programs', 'book', ['edit-program', 'program', 'lesson', 'play']],
     ['reviews', 'Results', 'check', ['review']],
+    ['payments', 'Payments', 'wallet'],
     ['calendar', 'Calendar', 'calendar'],
     ['requests', 'Requests', 'inbox'],
     ['library', 'Exercise library', 'library'],
@@ -46,14 +50,15 @@ const NAV = {
     ['my-profile', 'Profile', 'user'],
   ],
 };
-const MOBILE_MAIN = { student: 5, teacher: 4 };
+const MOBILE_MAIN = { student: 5, teacher: 5 };
+const SHORT = { 'my-profile': 'Profile' }; // labels in the narrow bottom bar
 
 function parse(hash) {
   const h = decodeURIComponent(String(hash || '').replace(/^#\/?/, ''));
   if (!h) return { name: '', id: '' };
   for (const n of KNOWN) {
-    if (h === n) return { name: n, id: '' };
-    if (h.startsWith(`${n}-`)) return { name: n, id: h.slice(n.length + 1) };
+    if (h === n) return { name: ALIASES[n] || n, id: '' };
+    if (h.startsWith(`${n}-`)) return { name: ALIASES[n] || n, id: h.slice(n.length + 1) };
   }
   return { name: h, id: '' };
 }
@@ -79,12 +84,20 @@ async function render(navigated = false) {
     name = DEFAULT[role];
     id = '';
     if (location.hash && location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
+  } else {
+    // Rewrite an old address (#class-…) to the new one (#program-…).
+    const want = `#${name}${id ? `-${id}` : ''}`;
+    if (location.hash && decodeURIComponent(location.hash) !== want && /^#\/?(classes|class-|class-editor|edit-class)/.test(location.hash)) history.replaceState(null, '', want);
   }
 
   if (navigated) closeAllModals(); // a refresh of the same page keeps open dialogs
   try { current?.unmount?.(); } catch (e) { console.error(e); }
   current = null;
 
+  if (role === 'student' || role === 'teacher') {
+    try { await loadNav(); } catch { /* the menu works without it */ }
+    if (token !== renderToken) return;
+  }
   const shell = paintShell(role, name, routes[name] === playView);
   const main = shell.querySelector('#main');
   main.innerHTML = '<div class="loading" aria-live="polite">Loading…</div>';
@@ -108,6 +121,7 @@ async function render(navigated = false) {
   current = view;
   document.title = view.title && view.title !== S.settings.site_name ? `${view.title}, ${S.settings.site_name}` : S.settings.site_name;
   if (!shell.dataset.keepScroll) window.scrollTo(0, 0);
+  markProgram(view.programId || '');
   try { view.mount?.(fresh); } catch (e) { console.error(e); }
   const h1 = fresh.querySelector('h1');
   if (h1 && document.activeElement === document.body) { h1.tabIndex = -1; h1.focus({ preventScroll: true }); }
@@ -117,7 +131,33 @@ async function render(navigated = false) {
 function navLink([key, label, ic, also = []], name, cls = 'nav-link') {
   const on = key === name || also.includes(name);
   const badge = key === 'reviews' ? S.counts.reviews : key === 'requests' ? S.counts.requests : 0;
-  return html`<a class="${cls} ${on ? 'is-on' : ''}" href="#${key}" ${on ? 'aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge ? html`<span class="badge" data-badge="${key}">${badge}</span>` : html`<span class="badge" data-badge="${key}" hidden></span>`}</a>`;
+  const text = cls === 'tab' && SHORT[key] ? SHORT[key] : label;
+  return html`<a class="${cls} ${on ? 'is-on' : ''}" href="#${key}" ${on ? 'aria-current="page"' : ''}>${icon(ic)}<span>${text}</span>${badge ? html`<span class="badge" data-badge="${key}">${badge}</span>` : html`<span class="badge" data-badge="${key}" hidden></span>`}</a>`;
+}
+
+// Programs listed in the side menu, under "Programs" / "My programs".
+function programLinks(role) {
+  const list = (S.nav && S.nav.programs) || [];
+  if (!list.length) return '';
+  const target = role === 'teacher' ? 'edit-program' : 'program';
+  return html`<div class="nav-sub" role="group" aria-label="Programs">${list.map((p) => html`<a class="nav-sublink" href="#${target}-${p.id}" data-nav-program="${p.id}">
+    <span class="nav-emoji" aria-hidden="true">${p.emoji || '📘'}</span><span class="nav-subtext">${p.title}</span>${role === 'teacher' && !p.published ? html`<span class="nav-hidden" title="Hidden from students">hidden</span>` : ''}</a>`)}</div>`;
+}
+
+function markProgram(id) {
+  document.querySelectorAll('[data-nav-program]').forEach((a) => {
+    const on = !!id && a.dataset.navProgram === id;
+    a.classList.toggle('is-on', on);
+    if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
+}
+
+function sideBalance() {
+  const b = S.nav && S.nav.balance;
+  if (!b) return '';
+  const price = priceOf(S.me);
+  if (!b.any && !(price > 0)) return '';
+  return html`<a class="side-balance bal-${balanceLevel(b.balance, price)}" href="#my-profile" title="Your balance">${icon('wallet')}<span>${money(b.balance)}</span></a>`;
 }
 
 function paintShell(role, name, full) {
@@ -132,7 +172,7 @@ function paintShell(role, name, full) {
     app.innerHTML = html`
       <header class="pub-head"><a class="brand" href="#home">${st.site_name}</a>
         <nav class="pub-nav" aria-label="Main">${role === 'public'
-          ? html`<a href="#book" class="${name === 'book' ? 'is-on' : ''}">Book a lesson</a><a class="btn btn-sm" href="#login">Sign in</a>`
+          ? html`<a href="#book" class="${name === 'book' ? 'is-on' : ''}">Book a lesson</a>${st.kaspi_url ? html`<a href="#pay" class="${name === 'pay' ? 'is-on' : ''}">Pay</a>` : ''}<a class="btn btn-sm" href="#login">Sign in</a>`
           : html`<a href="#account">My account</a>`}</nav></header>
       <main id="main" class="pub-main" tabindex="-1"></main>
       <footer class="pub-foot"><span>${st.site_name}</span>${st.contact_text ? html`<span>${st.contact_text}</span>` : ''}</footer>
@@ -148,9 +188,10 @@ function paintShell(role, name, full) {
     <button class="skip" data-skip>Skip to content</button>
     <aside class="side" aria-label="Menu">
       <a class="brand" href="#${DEFAULT[role]}">${st.site_name}</a>
-      <nav class="side-nav">${items.map((it) => navLink(it, name))}</nav>
+      <nav class="side-nav">${items.map((it) => html`${navLink(it, name)}${it[0] === 'programs' ? programLinks(role) : ''}`)}</nav>
       <div class="side-me"><span class="avatar" aria-hidden="true">${initials(S.me.full_name || S.me.email)}</span>
-        <div><strong>${S.me.full_name || 'Me'}</strong><span class="muted small">${role === 'teacher' ? 'Teacher' : S.me.level || 'Student'}</span></div></div>
+        <div><strong>${S.me.full_name || 'Me'}</strong><span class="muted small">${role === 'teacher' ? 'Teacher' : S.me.level || 'Student'}</span></div>
+        ${role === 'student' ? sideBalance() : ''}</div>
     </aside>
     <main id="main" class="app-main" tabindex="-1"></main>
     <nav class="tabbar" aria-label="Menu">${main.map((it) => navLink(it, name, 'tab'))}
@@ -211,7 +252,18 @@ function wireDemoBar() {
 
 // ---------------------------------------------------------------------
 async function reloadMe() {
+  const before = S.me?.id;
   S.me = await S.api.session();
+  if (S.me?.id !== before) invalidateNav();
+  syncTimezone();
+}
+
+// Remember each person's time zone, so reminder emails show their local time.
+function syncTimezone() {
+  if (!S.me || S.me.timezone === undefined) return;
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  if (!tz || S.me.timezone === tz) return;
+  S.api.updateProfile(S.me.id, { timezone: tz }).then((row) => { if (row && S.me) S.me.timezone = row.timezone; }).catch(() => {});
 }
 
 function newPasswordDialog() {

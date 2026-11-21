@@ -72,7 +72,7 @@ export async function playView({ id }) {
         .map((x, i) => `${i + 1}. ${x.q ? `${x.q}\n   ` : ''}${x.ok === true ? '✓ ' : x.ok === false ? '✗ ' : ''}${x.a}`).join('\n');
       notifyTeacher(`${S.me.full_name || S.me.email} finished: ${material.title}`, {
         Student: S.me.full_name || S.me.email,
-        Class: `${course.title}, ${lesson.title}`,
+        Program: `${course.title}, ${lesson.title}`,
         Exercise: material.title,
         Score: snap.score != null ? `${snap.score} / ${snap.max}` : 'No score (open answers)',
         'Time spent': duration(snap.seconds),

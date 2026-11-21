@@ -153,7 +153,7 @@ export function signupView() {
   return {
     title: 'Create an account',
     html: html`<div class="auth"><div class="auth-intro"><h1>Create an account</h1>
-      <p class="muted">${teacherName()} will approve your account and open your classes.</p></div>
+      <p class="muted">${teacherName()} will approve your account and open your programs.</p></div>
       ${signupForm()}
       <p class="auth-foot">Already have an account? <a href="#login">Sign in</a></p></div>`,
     submit: signupSubmit,
@@ -172,7 +172,7 @@ export async function joinView({ id }) {
   return {
     title: 'Join',
     html: html`<div class="auth"><div class="auth-intro"><p class="hand hand-lg">Welcome${info.full_name ? `, ${info.full_name}` : ''}!</p>
-      <h1>Create your account</h1><p class="muted">${teacherName()} invited you. Your classes will be ready as soon as you finish.</p></div>
+      <h1>Create your account</h1><p class="muted">${teacherName()} invited you. Your programs will be ready as soon as you finish.</p></div>
       ${signupForm({ name: info.full_name, email: info.email, code: id })}</div>`,
     submit: signupSubmit,
   };
@@ -186,8 +186,8 @@ export function waitingView() {
     html: html`<div class="auth"><div class="notice auth-card">
       <p class="hand hand-lg">Hi${me.full_name ? `, ${me.full_name}` : ''}!</p>
       ${paused
-        ? html`<h1>Your account is paused</h1><p>Your classes are hidden for now. Write to ${teacherName()} if you want to continue.</p>`
-        : html`<h1>Almost there</h1><p>${teacherName()} will approve your account soon. After that you will see your classes here.</p>
+        ? html`<h1>Your account is paused</h1><p>Your programs are hidden for now. Write to ${teacherName()} if you want to continue.</p>`
+        : html`<h1>Almost there</h1><p>${teacherName()} will approve your account soon. After that you will see your programs here.</p>
           <p>Want to start? <a href="#book">Book a lesson</a>.</p>`}
       <button class="btn" data-on="signout">${icon('logout')} Sign out</button></div></div>`,
     on: { async signout() { await S.api.signOut(); go('home'); refresh(); } },

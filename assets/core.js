@@ -8,7 +8,78 @@ export const S = {
   settings: {},   // website settings
   cfg: {},        // config.js
   counts: { reviews: 0, requests: 0 },
+  nav: null,      // { programs: [...], balance: {...} } for the side menu (cached)
 };
+
+// ---------- side menu data (programs list, student balance) ----------
+let navLoading = null;
+export function invalidateNav() { S.nav = null; navLoading = null; }
+export async function loadNav() {
+  if (!S.me || !S.api) return null;
+  if (S.nav && S.nav.for === S.me.id) return S.nav;
+  if (!navLoading) {
+    navLoading = (async () => {
+      const teacher = S.me.role === 'teacher';
+      const [tree, payments, held] = await Promise.all([
+        S.api.tree().catch(() => []),
+        teacher ? [] : S.api.listPayments({ student_id: S.me.id }).catch(() => []),
+        teacher ? [] : S.api.listHeld({ student_id: S.me.id }).catch(() => []),
+      ]);
+      S.nav = {
+        for: S.me.id,
+        programs: tree.map((c) => ({ id: c.id, title: c.title, emoji: c.emoji, color: c.color, published: c.published })),
+        balance: teacher ? null : ledgerFor(S.me.id, payments, held),
+      };
+      return S.nav;
+    })().finally(() => { navLoading = null; });
+  }
+  return navLoading;
+}
+
+// ---------- money and balances ----------
+const CURRENCY_SIGN = { KZT: '₸', USD: '$', EUR: '€', RUB: '₽', GBP: '£' };
+export const currencySign = () => CURRENCY_SIGN[(S.settings.currency || 'KZT').toUpperCase()] || (S.settings.currency || 'KZT').toUpperCase();
+
+// money(20000) -> "20 000 ₸"; money(-5000) -> "−5 000 ₸"
+export function money(n, { plus = false } = {}) {
+  const v = Number(n) || 0;
+  const digits = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(Math.abs(v)).replace(/,/g, ' ');
+  const pre = v < 0 ? '−' : plus && v > 0 ? '+' : '';
+  return `${pre}${digits} ${currencySign()}`;
+}
+
+// Price of one lesson for this student (their own price, or the default one).
+export function priceOf(profile) {
+  const own = profile && profile.lesson_price;
+  if (own !== null && own !== undefined && own !== '' && !Number.isNaN(Number(own))) return Number(own);
+  return Number(S.settings.default_lesson_price) || 0;
+}
+
+export const hasOwnPrice = (profile) => profile && profile.lesson_price !== null && profile.lesson_price !== undefined && profile.lesson_price !== '';
+
+// Totals for one student from their payments and lessons held.
+export function ledgerFor(studentId, payments, held) {
+  const pay = (payments || []).filter((p) => p.student_id === studentId);
+  const les = (held || []).filter((h) => h.student_id === studentId);
+  const paid = pay.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const spent = les.reduce((s, h) => s + (Number(h.price) || 0), 0);
+  const last = les.reduce((m, h) => (!m || h.held_on > m ? h.held_on : m), null);
+  return { paid, spent, balance: paid - spent, count: les.length, missed: les.filter((h) => h.status === 'missed').length, last, any: pay.length + les.length > 0 };
+}
+
+export function lessonsLeft(balance, price) {
+  if (!(price > 0)) return null;
+  return Math.floor(Math.max(0, balance) / price);
+}
+
+// "ok" (2+ lessons), "low" (less than 2 lessons), "out" (nothing or in debt)
+export function balanceLevel(balance, price) {
+  if (balance < 0) return 'out';
+  if (!(price > 0)) return balance > 0 ? 'ok' : 'none';
+  if (balance < price) return 'out';
+  if (balance < 2 * price) return 'low';
+  return 'ok';
+}
 
 let rerender = () => {};
 export function setRerender(fn) { rerender = fn; }
@@ -126,6 +197,15 @@ export function icsText(sessions, calName) {
   }
   lines.push('END:VCALENDAR');
   return lines.filter(Boolean).join('\r\n');
+}
+
+// CSV that opens correctly in Excel (UTF-8 with BOM, so Cyrillic names work).
+export function toCsv(rows) {
+  const cell = (v) => {
+    const s = v === null || v === undefined ? '' : String(v);
+    return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return '﻿' + rows.map((r) => r.map(cell).join(',')).join('\r\n');
 }
 
 export function downloadText(filename, text, type = 'text/calendar') {

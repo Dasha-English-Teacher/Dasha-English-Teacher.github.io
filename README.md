@@ -2,12 +2,12 @@
 
 A website for online English lessons:
 
-- **Students** sign in and see only their own classes, lessons and exercises, their schedule, their word list, and their results with your feedback.
-- **You (the teacher)** control everything: students, classes, lessons, exercises, the calendar, lesson requests and the public page.
+- **Students** sign in and see only their own programs, lessons and exercises, their schedule, their word list, their results with your feedback, and their balance.
+- **You (the teacher)** control everything: students, programs, lessons, exercises, the calendar, payments and balances, lesson requests and the public page.
 - **Exercises** are your usual HTML files on GitHub. The website opens them inside a lesson, reads the score and the answers automatically, saves them, and emails you.
-- **Visitors** see your public page and can book a lesson or send a request.
+- **Visitors** see your public page, can book a lesson or send a request, and can pay with Kaspi.
 
-Everything runs on free services: GitHub Pages (the website), Supabase (the database), FormSubmit (email notifications) and, if you want, Cal.com (a booking page).
+Everything runs on free services: GitHub Pages (the website), Supabase (the database), Resend (emails to students), FormSubmit (emails to you) and Cal.com (a booking page).
 
 ## Current setup
 
@@ -16,7 +16,9 @@ Everything runs on free services: GitHub Pages (the website), Supabase (the data
 - **Database:** Supabase project **english-studio** in the organization *English with Dasha* (free plan). Sign in to Supabase with Dasha's GitHub account. Email confirmation is turned off, and the site address is set under *Authentication → URL Configuration*.
 - **Booking page:** Cal.com event **Trial lesson** (30 minutes): https://cal.com/dasha-teacher/trial-lesson. Still to do in Cal.com: set the real teaching hours (*Availability*) and connect Google Calendar (*Apps → Calendar*) so busy times are hidden.
   **If you change the Cal.com username or the event link, also update *Booking page link* on the website's Website page.** Otherwise the booking calendar shows "404, this page does not exist".
-- **Notifications:** sent to the email on the website's *Website* page.
+- **Emails to you:** sent through FormSubmit to the address on the website's *Website* page.
+- **Emails to students:** sent from `lessons@dashaenglish.com` through **Resend** (account: Dasha's GitHub, free plan: 100 emails a day, 3,000 a month). Replies go to Dasha's Gmail. The Resend key is stored in Supabase: *Integrations → Vault → Secrets*, named `resend_api_key`. DNS records for Resend at Porkbun: TXT `resend._domainkey`, CNAME `send` and `rsend`, TXT `_dmarc`. Do not delete them.
+- **Payments:** Kaspi link https://pay.kaspi.kz/pay/5rtd4cl9 and the QR code `assets/kaspi-qr.png`, shown on the *Pay* page (`dashaenglish.com/#pay`) and on each student's profile.
 
 Steps 1, 2 and 5 below are already done. They stay here in case you ever need to set things up again.
 
@@ -25,7 +27,7 @@ Steps 1, 2 and 5 below are already done. They stay here in case you ever need to
 | File or folder | What it is |
 |---|---|
 | `index.html`, `config.js`, `assets/` | The website itself |
-| `supabase/schema.sql` | Sets up the database. You run it once. |
+| `supabase/schema.sql` | Sets up the database. Run it once; run it again after an update (it keeps your data). |
 | `exercise-kit/` | How to make new exercises send their score (a sentence for your AI prompt and an example) |
 | `.github/workflows/keep-alive.yml` | Keeps the free database awake during holidays |
 
@@ -40,7 +42,7 @@ Until `config.js` has the database details, the website runs in **demo mode** wi
 3. Wait about 2 minutes until the project is ready.
 4. Open **SQL Editor**, then **New query**. Paste everything from `supabase/schema.sql` and press **Run**. You should see *Success. No rows returned*.
 5. Open **Authentication**, then **Sign In / Providers**, then **Email**. Turn **off** *Confirm email* and save. (Supabase's built-in email only reaches your own team, so students could not confirm. You can turn it back on later if you connect your own email under *Emails → SMTP Settings*.)
-6. Open **Authentication**, then **URL Configuration**. Set **Site URL** to `https://dasha-english-teacher.github.io/` and add the same address under **Redirect URLs**.
+6. Open **Authentication**, then **URL Configuration**. Set **Site URL** to `https://dashaenglish.com` and add `https://dashaenglish.com/**` under **Redirect URLs**.
 7. Open **Project Settings**, then **API Keys** (or **API**). Copy the **Project URL** and the **publishable** key (older projects call it the *anon public* key). Never use the *secret* or *service_role* key on the website.
 
 ### 2. Put the website online (GitHub Pages)
@@ -75,9 +77,11 @@ New people then pick a time themselves, and it goes straight into your Google Ca
 
 ## Everyday use
 
-- **New student:** *Students → Invite a student*, tick their classes, send them the link. They choose a password and their classes are ready. People who sign up by themselves wait on *Requests* until you approve them.
+- **New student:** *Students → Invite a student*, tick their programs. The website emails them the link (or copy it and send it yourself). They choose a password and their programs are ready. People who sign up by themselves wait on *Requests* until you approve them.
+- **Programs, lessons, exercises:** a *program* holds lessons, a lesson holds exercises (and links, videos, notes). On *Programs → Edit*, the arrows move things up and down; the ↔ button moves or copies a lesson to another program, or an exercise to another lesson. The same exercise can sit in several lessons.
 - **New exercise:** upload the HTML file to your exercises repository as usual. Then open *Exercise library → Refresh* and press *Add to a lesson*.
-- **Lessons and reminders:** *Calendar → Schedule a lesson*, then press **Open Google Calendar** and **Save**. Google sends the student an invitation and reminders. Students also see all their lessons on their *Schedule* page.
+- **Lessons and reminders:** *Calendar → Schedule a lesson*. Students see their lessons on their *Schedule* page and get an email reminder (by default 1 day and 1 hour before). You can also put the lesson in Google Calendar with one button.
+- **Payments and balances:** set a default price on *Website → Payments*, and a personal price on a student's page if needed. When a student pays, press *Payment* (on *Payments* or the student's page) and enter the amount. After a lesson, press **Held** on *Today* (or *Lesson held* in the calendar): the price is taken from the balance. *Payments* shows every student's balance, what you received and earned this month, homework progress and average scores, and can be downloaded as a CSV file for Excel.
 - **Checking work:** *Results → To review*. You see the score, each answer with ✓ or ✗, the time spent, and whether the answer key was opened. Write a comment and the student sees it in red "teacher's pen" next to their answers.
 
 ## How exercises report results
@@ -89,6 +93,7 @@ For new exercises, add the sentence from `exercise-kit/AI-PROMPT.md` to your req
 ## Good to know
 
 - **Cost:** everything here is free. The free Supabase plan includes 500 MB of database space, which is plenty for many years of results. A free project pauses after a week without visits. The *keep-alive* task wakes it every 3 days, and you can also restore a paused project with one click in Supabase.
-- **Security:** the publishable key in `config.js` is meant to be public. The database rules (row-level security) make sure each student sees only their own data, and only the teacher can change classes, settings and feedback.
+- **Security:** the publishable key in `config.js` is meant to be public. The database rules (row-level security) make sure each student sees only their own data and balance, and only the teacher can change programs, prices, payments, settings and feedback. Secret keys (like the Resend key) live only in Supabase Vault, never in this repository.
 - **Your data:** in Supabase, *Table Editor* shows all tables like a spreadsheet, and every table can be exported to CSV.
-- **Your own domain** (for example `englishwithdasha.com`) can be added later in *Settings → Pages → Custom domain*. Your exercises keep working because GitHub moves them to the same domain.
+- **Emails to students** (each can be switched off on *Website → Emails to students*): lesson reminders, a moved or cancelled lesson, your feedback on an exercise, a new program, payment receipts, a warning when the balance is less than one lesson, a welcome email when you approve an account, and invitations. Receipts for every lesson held are off by default. Students can turn all emails off in their profile. *Website → Email sending* shows whether sending works and lists the latest emails.
+- **"Forgot password" emails** come from Supabase's own mail service, which only delivers to your Supabase team. To make them reach students, use Resend for them too: Supabase → *Authentication → Emails → SMTP Settings*, host `smtp.resend.com`, port `465`, user `resend`, password: a Resend API key, sender `lessons@dashaenglish.com`.

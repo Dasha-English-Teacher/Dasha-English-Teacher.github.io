@@ -17,20 +17,48 @@ export const DEFAULT_SETTINGS = {
   contact_text: '',
   time_format: '12h',
   exercise_repos: 'Dasha-English-Teacher/miro-exercises',
+  // payments
+  currency: 'KZT',
+  default_lesson_price: '',
+  kaspi_url: 'https://pay.kaspi.kz/pay/5rtd4cl9',
+  kaspi_qr: 'assets/kaspi-qr.png',
+  payment_note: '',
+  charge_missed: false,
+  // emails to students
+  site_url: 'https://dashaenglish.com/',
+  emails_enabled: true,
+  email_from: 'English with Dasha <lessons@dashaenglish.com>',
+  email_reply_to: '',
+  email_reminder_hours: 24,
+  email_reminder2_hours: 1,
+  email_on_reminder: true,
+  email_on_feedback: true,
+  email_on_payment: true,
+  email_on_held: false,
+  email_on_low_balance: true,
+  email_on_program: true,
+  email_on_schedule: true,
+  email_on_welcome: true,
+  email_on_invite: true,
 };
 
 const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
 const FIELDS = {
-  profiles: ['full_name', 'role', 'status', 'level', 'phone', 'goals'],
+  profiles: ['full_name', 'role', 'status', 'level', 'phone', 'goals', 'lesson_price', 'email_notifications', 'timezone'],
   courses: ['title', 'description', 'emoji', 'color', 'level', 'published', 'sort'],
   lessons: ['course_id', 'title', 'description', 'published', 'sort'],
   materials: ['lesson_id', 'kind', 'title', 'url', 'body', 'sort'],
   attempts: ['material_id', 'material_title', 'status', 'score', 'max_score', 'first_score', 'first_max', 'revealed', 'answers', 'seconds', 'finished_at', 'feedback', 'feedback_at', 'feedback_seen', 'reviewed'],
   sessions: ['student_id', 'title', 'starts_at', 'minutes', 'meeting_url', 'note', 'status'],
   booking_requests: ['name', 'email', 'contact', 'level', 'preferred_times', 'message', 'status'],
-  invites: ['email', 'full_name', 'course_ids'],
+  invites: ['email', 'full_name', 'course_ids', 'send_email'],
   words: ['student_id', 'term', 'meaning', 'example', 'learned'],
+  payments: ['student_id', 'amount', 'paid_on', 'method', 'note'],
+  held_lessons: ['student_id', 'session_id', 'lesson_id', 'held_on', 'minutes', 'price', 'title', 'note', 'status'],
 };
+
+// Light columns for statistics (no answers), so the payments table loads fast.
+const ATTEMPT_STATS = 'id,student_id,material_id,material_title,status,score,max_score,started_at,finished_at,updated_at,reviewed';
 
 export function sortTree(courses) {
   courses.sort((a, b) => (a.sort - b.sort) || String(a.created_at).localeCompare(String(b.created_at)));
@@ -128,6 +156,13 @@ export async function createLiveApi(cfg) {
     deleteLesson: (id) => remove('lessons', id),
     saveMaterial: (o) => save('materials', o),
     deleteMaterial: (id) => remove('materials', id),
+    // Copy a lesson with everything inside it into a program.
+    async copyLesson(lesson, course_id, sort) {
+      const row = await save('lessons', { course_id, title: lesson.title, description: lesson.description || '', published: lesson.published, sort });
+      const mats = (lesson.materials || []).map((m, i) => ({ lesson_id: row.id, kind: m.kind, title: m.title, url: m.url || '', body: m.body || '', sort: i }));
+      if (mats.length) await run(sb.from('materials').insert(mats));
+      return row;
+    },
 
     listEnrollments: () => run(sb.from('enrollments').select('*')),
     async setEnrollment(course_id, student_id, on) {
@@ -139,6 +174,11 @@ export async function createLiveApi(cfg) {
       let p = sb.from('attempts').select('*').order('started_at', { ascending: false }).limit(limit);
       if (student_id) p = p.eq('student_id', student_id);
       if (material_id) p = p.eq('material_id', material_id);
+      return run(p);
+    },
+    async listAttemptStats({ student_id } = {}) {
+      let p = sb.from('attempts').select(ATTEMPT_STATS).order('started_at', { ascending: false }).limit(5000);
+      if (student_id) p = p.eq('student_id', student_id);
       return run(p);
     },
     getAttempt: (id) => run(sb.from('attempts').select('*').eq('id', id).maybeSingle()),
@@ -171,6 +211,28 @@ export async function createLiveApi(cfg) {
       return row?.body || '';
     },
     saveNotes: (student_id, body) => run(sb.from('teacher_notes').upsert({ student_id, body, updated_at: new Date().toISOString() })),
+
+    // ----- balances -----
+    async listPayments({ student_id } = {}) {
+      let p = sb.from('payments').select('*').order('paid_on', { ascending: false }).order('created_at', { ascending: false });
+      if (student_id) p = p.eq('student_id', student_id);
+      return run(p);
+    },
+    savePayment: (o) => save('payments', o),
+    deletePayment: (id) => remove('payments', id),
+    async listHeld({ student_id } = {}) {
+      let p = sb.from('held_lessons').select('*').order('held_on', { ascending: false });
+      if (student_id) p = p.eq('student_id', student_id);
+      return run(p);
+    },
+    saveHeld: (o) => save('held_lessons', o),
+    deleteHeld: (id) => remove('held_lessons', id),
+
+    // ----- emails to students -----
+    emailStatus: () => run(sb.rpc('email_status')),
+    listEmails: (limit = 30) => run(sb.from('email_outbox').select('id,to_email,to_name,kind,subject,status,tries,error,created_at,sent_at,send_after').order('created_at', { ascending: false }).limit(limit)),
+    sendTestEmail: () => run(sb.rpc('send_test_email')),
+    retryEmails: () => run(sb.rpc('email_retry')),
   };
   return api;
 }
@@ -178,7 +240,7 @@ export async function createLiveApi(cfg) {
 // =====================================================================
 // DEMO (sample data in this browser)
 // =====================================================================
-const DEMO_KEY = 'english-studio-demo-v1';
+const DEMO_KEY = 'english-studio-demo-v2';
 
 export const DEMO_EXERCISES = [
   'Tamila_Part_1_Multiple_Choice.html',
@@ -202,12 +264,24 @@ function demoSeed(base, only) {
   const T = 'u-dasha', S1 = 'u-tamila', S2 = 'u-maria', S3 = 'u-ivan';
   const created = iso(now - 40 * day);
   const db = {
-    settings: { ...DEFAULT_SETTINGS, meeting_url: 'https://meet.google.com/' },
+    settings: { ...DEFAULT_SETTINGS, meeting_url: 'https://meet.google.com/', default_lesson_price: 5000 },
     profiles: [
-      { id: T, email: 'dasha@example.com', full_name: 'Dasha', role: 'teacher', status: 'active', level: '', phone: '', goals: '', created_at: iso(now - 60 * day) },
-      { id: S1, email: 'tamila@example.com', full_name: 'Tamila', role: 'student', status: 'active', level: 'C1', phone: '', goals: 'Sound natural at work meetings; prepare for C1 exam.', created_at: created },
-      { id: S2, email: 'maria@example.com', full_name: 'Maria', role: 'student', status: 'active', level: 'B2', phone: '', goals: 'Vocabulary for talking about work and well-being.', created_at: iso(now - 20 * day) },
-      { id: S3, email: 'ivan@example.com', full_name: 'Ivan', role: 'student', status: 'pending', level: '', phone: '', goals: '', created_at: iso(now - 1 * day) },
+      { id: T, email: 'dasha@example.com', full_name: 'Dasha', role: 'teacher', status: 'active', level: '', phone: '', goals: '', lesson_price: null, email_notifications: true, timezone: '', created_at: iso(now - 60 * day) },
+      { id: S1, email: 'tamila@example.com', full_name: 'Tamila', role: 'student', status: 'active', level: 'C1', phone: '', goals: 'Sound natural at work meetings; prepare for C1 exam.', lesson_price: 6000, email_notifications: true, timezone: '', created_at: created },
+      { id: S2, email: 'maria@example.com', full_name: 'Maria', role: 'student', status: 'active', level: 'B2', phone: '', goals: 'Vocabulary for talking about work and well-being.', lesson_price: null, email_notifications: true, timezone: '', created_at: iso(now - 20 * day) },
+      { id: S3, email: 'ivan@example.com', full_name: 'Ivan', role: 'student', status: 'pending', level: '', phone: '', goals: '', lesson_price: null, email_notifications: true, timezone: '', created_at: iso(now - 1 * day) },
+    ],
+    payments: [
+      { id: 'p-1', student_id: S1, amount: 24000, paid_on: iso(now - 30 * day).slice(0, 10), method: 'kaspi', note: '4 lessons', created_at: iso(now - 30 * day) },
+      { id: 'p-2', student_id: S1, amount: 12000, paid_on: iso(now - 6 * day).slice(0, 10), method: 'kaspi', note: '', created_at: iso(now - 6 * day) },
+      { id: 'p-3', student_id: S2, amount: 10000, paid_on: iso(now - 15 * day).slice(0, 10), method: 'cash', note: '', created_at: iso(now - 15 * day) },
+    ],
+    held_lessons: [
+      { id: 'h-1', student_id: S1, session_id: null, lesson_id: 'l-contrast', held_on: at(-25, 18), minutes: 60, price: 6000, title: 'English lesson', note: '', status: 'held', created_at: iso(now - 25 * day) },
+      { id: 'h-2', student_id: S1, session_id: null, lesson_id: 'l-writing', held_on: at(-18, 18), minutes: 60, price: 6000, title: 'English lesson', note: '', status: 'held', created_at: iso(now - 18 * day) },
+      { id: 'h-3', student_id: S1, session_id: null, lesson_id: 'l-impostor', held_on: at(-11, 18), minutes: 60, price: 6000, title: 'English lesson', note: '', status: 'held', created_at: iso(now - 11 * day) },
+      { id: 'h-4', student_id: S1, session_id: 's-p1', lesson_id: null, held_on: at(-4, 18), minutes: 60, price: 6000, title: 'English lesson', note: '', status: 'held', created_at: iso(now - 4 * day) },
+      { id: 'h-5', student_id: S2, session_id: null, lesson_id: 'l-impostor', held_on: at(-9, 10, 30), minutes: 45, price: 5000, title: 'Vocabulary lesson', note: '', status: 'held', created_at: iso(now - 9 * day) },
     ],
     courses: [
       { id: 'c-grammar', title: 'C1 grammar with Tamila', description: 'Contrast linkers, comparatives and combining ideas in writing.', emoji: '✍️', color: '#1f4fd1', level: 'C1', published: true, sort: 0, created_at: created },
@@ -260,6 +334,7 @@ function demoSeed(base, only) {
     ],
     sessions: [
       { id: 's-p1', student_id: S1, title: 'English lesson', starts_at: at(-4, 18), minutes: 60, meeting_url: 'https://meet.google.com/', note: '', status: 'done', created_at: created },
+      { id: 's-p2', student_id: S2, title: 'Vocabulary lesson', starts_at: at(-2, 10, 30), minutes: 45, meeting_url: 'https://meet.google.com/', note: '', status: 'scheduled', created_at: created },
       { id: 's-1', student_id: S1, title: 'English lesson', starts_at: at(1, 18), minutes: 60, meeting_url: 'https://meet.google.com/', note: 'We will check the writing task together.', status: 'scheduled', created_at: created },
       { id: 's-2', student_id: S1, title: 'English lesson', starts_at: at(8, 18), minutes: 60, meeting_url: 'https://meet.google.com/', note: '', status: 'scheduled', created_at: created },
       { id: 's-3', student_id: S2, title: 'Vocabulary lesson', starts_at: at(2, 10, 30), minutes: 45, meeting_url: 'https://meet.google.com/', note: '', status: 'scheduled', created_at: created },
@@ -345,7 +420,7 @@ export function createDemoApi(cfg) {
     async signUp({ email, full_name, invite_code }) {
       if (db.profiles.some((p) => p.email.toLowerCase() === email.toLowerCase())) throw new Error('User already registered');
       const inv = invite_code ? db.invites.find((i) => i.code === invite_code && !i.used_at) : null;
-      const p = { id: id('u'), email, full_name: full_name || inv?.full_name || '', role: 'student', status: inv ? 'active' : 'pending', level: '', phone: '', goals: '', created_at: nowIso() };
+      const p = { id: id('u'), email, full_name: full_name || inv?.full_name || '', role: 'student', status: inv ? 'active' : 'pending', level: '', phone: '', goals: '', lesson_price: null, email_notifications: true, timezone: '', created_at: nowIso() };
       db.profiles.push(p);
       if (inv) {
         inv.course_ids.forEach((c) => db.enrollments.push({ course_id: c, student_id: p.id, created_at: nowIso() }));
@@ -372,7 +447,7 @@ export function createDemoApi(cfg) {
     async updateProfile(pid, patch) {
       const me = meRow(); need(me && (isTeacher() || me.id === pid));
       const row = db.profiles.find((p) => p.id === pid); need(row);
-      const allowed = isTeacher() ? FIELDS.profiles : ['full_name', 'level', 'phone', 'goals'];
+      const allowed = isTeacher() ? FIELDS.profiles : ['full_name', 'level', 'phone', 'goals', 'email_notifications', 'timezone'];
       Object.assign(row, pick(patch, allowed)); persist();
       return wait(row);
     },
@@ -401,9 +476,23 @@ export function createDemoApi(cfg) {
       db.courses = db.courses.filter((c) => c.id !== cid); persist();
     },
     saveLesson(o) { need(isTeacher()); return upsert(db.lessons, o, 'l', FIELDS.lessons); },
-    async deleteLesson(lid) { need(isTeacher()); db.materials = db.materials.filter((m) => m.lesson_id !== lid); db.lessons = db.lessons.filter((l) => l.id !== lid); persist(); },
+    async deleteLesson(lid) {
+      need(isTeacher());
+      db.materials = db.materials.filter((m) => m.lesson_id !== lid);
+      db.lessons = db.lessons.filter((l) => l.id !== lid);
+      db.held_lessons.forEach((h) => { if (h.lesson_id === lid) h.lesson_id = null; });
+      persist();
+    },
     saveMaterial(o) { need(isTeacher()); return upsert(db.materials, o, 'm', FIELDS.materials); },
     async deleteMaterial(mid) { need(isTeacher()); db.materials = db.materials.filter((m) => m.id !== mid); persist(); },
+    async copyLesson(lesson, course_id, sort) {
+      need(isTeacher());
+      const row = { id: id('l'), created_at: nowIso(), course_id, title: lesson.title, description: lesson.description || '', published: lesson.published, sort };
+      db.lessons.push(row);
+      (lesson.materials || []).forEach((m, i) => db.materials.push({ id: id('m'), created_at: nowIso(), lesson_id: row.id, kind: m.kind, title: m.title, url: m.url || '', body: m.body || '', sort: i }));
+      persist();
+      return wait(row);
+    },
 
     async listEnrollments() { const me = meRow(); need(me); return wait(isTeacher() ? db.enrollments : db.enrollments.filter((e) => e.student_id === me.id)); },
     async setEnrollment(course_id, student_id, on) {
@@ -421,6 +510,7 @@ export function createDemoApi(cfg) {
       rows.sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)));
       return wait(rows.slice(0, limit));
     },
+    async listAttemptStats({ student_id } = {}) { return api.listAttempts({ student_id, limit: 5000 }); },
     async getAttempt(aid) { const me = meRow(); need(me); const a = db.attempts.find((x) => x.id === aid && (isTeacher() || x.student_id === me.id)); return wait(a || null); },
     async createAttempt(o) {
       const me = meRow(); need(me);
@@ -449,9 +539,31 @@ export function createDemoApi(cfg) {
       rows.sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)));
       return wait(rows);
     },
-    saveSession(o) { need(isTeacher()); return upsert(db.sessions, o, 's', FIELDS.sessions); },
-    async addSessions(list) { need(isTeacher()); const rows = list.map((o) => ({ id: id('s'), created_at: nowIso(), status: 'scheduled', ...pick(o, FIELDS.sessions) })); db.sessions.push(...rows); persist(); return wait(rows); },
-    async deleteSession(sid) { need(isTeacher()); db.sessions = db.sessions.filter((s) => s.id !== sid); persist(); },
+    // Works like the database trigger: a lesson marked as done (or missed, if
+    // missed lessons are charged) is recorded as held and taken from the balance.
+    async saveSession(o) {
+      need(isTeacher());
+      const before = o.id ? db.sessions.find((s) => s.id === o.id) : null;
+      const oldStatus = before ? before.status : null;
+      const row = await upsert(db.sessions, o, 's', FIELDS.sessions);
+      syncHeld(db.sessions.find((s) => s.id === row.id), oldStatus);
+      persist();
+      return wait(db.sessions.find((s) => s.id === row.id));
+    },
+    async addSessions(list) {
+      need(isTeacher());
+      const rows = list.map((o) => ({ id: id('s'), created_at: nowIso(), status: 'scheduled', ...pick(o, FIELDS.sessions) }));
+      db.sessions.push(...rows);
+      rows.forEach((r) => syncHeld(r, null));
+      persist();
+      return wait(rows);
+    },
+    async deleteSession(sid) {
+      need(isTeacher());
+      db.sessions = db.sessions.filter((s) => s.id !== sid);
+      db.held_lessons.forEach((h) => { if (h.session_id === sid) h.session_id = null; });
+      persist();
+    },
 
     async createRequest(o) { db.booking_requests.unshift({ id: id('r'), created_at: nowIso(), status: 'new', ...pick(o, FIELDS.booking_requests) }); persist(); },
     async listRequests() { need(isTeacher()); return wait(db.booking_requests); },
@@ -464,7 +576,47 @@ export function createDemoApi(cfg) {
 
     async getNotes(sid) { need(isTeacher()); return db.notes[sid] || ''; },
     async saveNotes(sid, body) { need(isTeacher()); db.notes[sid] = body; persist(); },
+
+    // ----- balances -----
+    async listPayments({ student_id } = {}) {
+      const me = meRow(); need(me);
+      let rows = db.payments.filter((p) => isTeacher() || p.student_id === me.id);
+      if (student_id) rows = rows.filter((p) => p.student_id === student_id);
+      rows.sort((a, b) => String(b.paid_on).localeCompare(String(a.paid_on)) || String(b.created_at).localeCompare(String(a.created_at)));
+      return wait(rows);
+    },
+    savePayment(o) { need(isTeacher()); return upsert(db.payments, o, 'p', FIELDS.payments); },
+    async deletePayment(pid) { need(isTeacher()); db.payments = db.payments.filter((p) => p.id !== pid); persist(); },
+    async listHeld({ student_id } = {}) {
+      const me = meRow(); need(me);
+      let rows = db.held_lessons.filter((h) => isTeacher() || h.student_id === me.id);
+      if (student_id) rows = rows.filter((h) => h.student_id === student_id);
+      rows.sort((a, b) => String(b.held_on).localeCompare(String(a.held_on)));
+      return wait(rows);
+    },
+    saveHeld(o) { need(isTeacher()); return upsert(db.held_lessons, { status: 'held', ...o }, 'h', FIELDS.held_lessons); },
+    async deleteHeld(hid) { need(isTeacher()); db.held_lessons = db.held_lessons.filter((h) => h.id !== hid); persist(); },
+
+    // ----- emails (nothing is sent in demo mode) -----
+    async emailStatus() { need(isTeacher()); return { demo: true, key_set: false, cron: false, queued: 0, sent_today: 0, failed: 0 }; },
+    async listEmails() { need(isTeacher()); return []; },
+    async sendTestEmail() { need(isTeacher()); throw new Error('Demo mode: emails are not sent.'); },
+    async retryEmails() { need(isTeacher()); return 0; },
   };
+
+  function syncHeld(s, oldStatus) {
+    if (!s) return;
+    const charged = (st) => st === 'done' || (st === 'missed' && db.settings.charge_missed === true);
+    const nowCharged = s.student_id && charged(s.status);
+    const wasCharged = oldStatus && charged(oldStatus);
+    if (nowCharged && !wasCharged && !db.held_lessons.some((h) => h.session_id === s.id)) {
+      const p = db.profiles.find((x) => x.id === s.student_id);
+      const price = p && p.lesson_price != null && p.lesson_price !== '' ? Number(p.lesson_price) : Number(db.settings.default_lesson_price) || 0;
+      db.held_lessons.push({ id: id('h'), created_at: nowIso(), student_id: s.student_id, session_id: s.id, lesson_id: null, held_on: s.starts_at, minutes: s.minutes, price, title: s.title, note: '', status: s.status === 'missed' ? 'missed' : 'held' });
+    } else if (!nowCharged && wasCharged) {
+      db.held_lessons = db.held_lessons.filter((h) => h.session_id !== s.id);
+    }
+  }
   return api;
 }
 
