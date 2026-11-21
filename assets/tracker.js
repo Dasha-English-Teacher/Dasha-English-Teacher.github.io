@@ -264,6 +264,10 @@ export function createTracker(iframe, { onChange = () => {}, studentName = '' } 
     }
 
     const onClick = (e) => {
+      // Following a link to another page (for example "Next exercise") is not work on this exercise.
+      const link = e.target.closest && e.target.closest('a[href]');
+      const href = link ? link.getAttribute('href').trim() : '';
+      if (href && !href.startsWith('#') && !/^javascript:/i.test(href)) return;
       markActive();
       const b = e.target.closest && e.target.closest('button, [role="button"], a, input[type="button"], input[type="submit"]');
       if (!b) { scheduleScan(); return; }

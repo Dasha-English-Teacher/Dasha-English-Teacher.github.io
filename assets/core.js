@@ -14,6 +14,15 @@ export const S = {
 // ---------- side menu data (programs list, student balance) ----------
 let navLoading = null;
 export function invalidateNav() { S.nav = null; navLoading = null; }
+// Any change to programs, lessons or sections makes the cached menu data
+// (program list, kinds of sections) out of date.
+export function trackTreeChanges(api) {
+  for (const k of ['saveCourse', 'deleteCourse', 'saveLesson', 'deleteLesson', 'saveMaterial', 'deleteMaterial']) {
+    const f = api[k];
+    if (typeof f === 'function') api[k] = async (...args) => { const r = await f.apply(api, args); invalidateNav(); return r; };
+  }
+  return api;
+}
 export async function loadNav() {
   if (!S.me || !S.api) return null;
   if (S.nav && S.nav.for === S.me.id) return S.nav;
@@ -28,6 +37,7 @@ export async function loadNav() {
       S.nav = {
         for: S.me.id,
         programs: tree.map((c) => ({ id: c.id, title: c.title, emoji: c.emoji, color: c.color, published: c.published })),
+        kinds: new Map(tree.flatMap((c) => c.lessons.flatMap((l) => l.materials.map((m) => [m.id, m.kind])))),
         balance: teacher ? null : ledgerFor(S.me.id, payments, held),
       };
       return S.nav;
@@ -232,6 +242,37 @@ function pagesUrl(owner, repo, path) {
 // Her exercises live under her GitHub Pages address, which now redirects to
 // her own domain. Use the domain directly so the page and the exercise stay
 // on the same address (needed to read scores) and skip the redirect.
+// The same file can be written as dasha-english-teacher.github.io/... or
+// dashaenglish.com/...; this gives one comparable form ("host/path").
+export function normUrl(u) {
+  try {
+    const x = new URL(u, location.href);
+    const host = x.hostname.toLowerCase().replace(/^www\./, '');
+    const gh = String((S.cfg && S.cfg.githubPagesHost) || '').toLowerCase();
+    const dom = String((S.cfg && S.cfg.customDomain) || '').toLowerCase();
+    let path = x.pathname;
+    try { path = decodeURIComponent(path); } catch { /* keep as is */ }
+    return `${gh && dom && host === gh ? dom : host}${path}`;
+  } catch { return String(u || ''); }
+}
+
+// Sections that are only read or watched (not exercises) are saved as "seen"
+// attempts. They are not work to review, so lists for the teacher skip them.
+export function isExerciseAttempt(a) {
+  const kinds = S.nav && S.nav.kinds;
+  const kind = kinds && a.material_id ? kinds.get(a.material_id) : null;
+  return !kind || kind === 'exercise';
+}
+export const needsReview = (a) => a.status === 'completed' && !a.reviewed && isExerciseAttempt(a);
+
+// "phrasal-verbs/lesson-01" -> "Lesson 1"; "1-match-up.html" -> "Match up"
+export function folderOf(path) { const i = String(path).lastIndexOf('/'); return i < 0 ? '' : path.slice(0, i); }
+export function niceTitle(name) {
+  return String(name).split('/').pop().replace(/\.html?$/i, '').replace(/^\d+\s*[-_.)\s]\s*/, '')
+    .replace(/[-_]+/g, ' ').replace(/\b0+(\d)/g, '$1').trim().replace(/^./, (c) => c.toUpperCase()) || name;
+}
+export const byName = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+
 export function siteAddress(url) {
   const domain = S.cfg && S.cfg.customDomain;
   const from = S.cfg && S.cfg.githubPagesHost;

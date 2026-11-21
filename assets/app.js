@@ -1,18 +1,18 @@
 // Main file: starts the app, decides which page to show, draws the menu.
 import { html, icon, wire, toast, openModal, closeAllModals, showError, setTimeFormat, initials, esc } from './ui.js';
 import { createApi } from './api.js';
-import { S, setRerender, go, refresh, isTeacher, loadNav, invalidateNav, money, priceOf, balanceLevel } from './core.js';
+import { S, setRerender, go, refresh, isTeacher, loadNav, invalidateNav, trackTreeChanges, money, priceOf, balanceLevel, needsReview } from './core.js';
 import * as pub from './views-public.js';
 import * as stu from './views-student.js';
 import * as tea from './views-teacher.js';
 import * as bill from './views-billing.js';
-import { playView } from './player.js';
+import * as room from './lesson-room.js';
 
 const ROUTES = {
   public: { home: pub.homeView, book: pub.bookView, pay: bill.payView, login: pub.loginView, signup: pub.signupView, join: pub.joinView },
   waiting: { home: pub.homeView, book: pub.bookView, pay: bill.payView, account: pub.waitingView },
   student: {
-    programs: stu.programsView, program: stu.programView, lesson: stu.lessonView, play: playView,
+    programs: stu.programsView, program: stu.programView, lesson: room.lessonRoom, play: room.playRoom, finish: room.finishRoom,
     schedule: stu.scheduleView, words: stu.wordsView, results: stu.resultsView, result: stu.resultView,
     'my-profile': stu.profileView, pay: bill.payView, book: pub.bookView, home: pub.homeView,
   },
@@ -21,7 +21,7 @@ const ROUTES = {
     programs: tea.programEditorView, 'edit-program': tea.editProgramView, library: tea.libraryView,
     reviews: tea.reviewsView, review: tea.reviewView, calendar: tea.calendarView, requests: tea.requestsView,
     'site-setup': tea.siteSetupView, 'my-profile': stu.profileView,
-    program: stu.programView, lesson: stu.lessonView, play: playView, book: pub.bookView, pay: bill.payView, home: pub.homeView,
+    program: stu.programView, lesson: room.lessonRoom, play: room.playRoom, finish: room.finishRoom, book: pub.bookView, pay: bill.payView, home: pub.homeView,
   },
 };
 // Old addresses (before "classes" were renamed "programs") keep working.
@@ -31,7 +31,7 @@ const KNOWN = [...new Set([...Object.values(ROUTES).flatMap((r) => Object.keys(r
 
 const NAV = {
   student: [
-    ['programs', 'My programs', 'book', ['program', 'lesson', 'play']],
+    ['programs', 'My programs', 'book', ['program', 'lesson', 'play', 'finish']],
     ['schedule', 'Schedule', 'calendar'],
     ['results', 'Results', 'star', ['result']],
     ['words', 'My words', 'words'],
@@ -40,7 +40,7 @@ const NAV = {
   teacher: [
     ['today', 'Today', 'home'],
     ['students', 'Students', 'users', ['student']],
-    ['programs', 'Programs', 'book', ['edit-program', 'program', 'lesson', 'play']],
+    ['programs', 'Programs', 'book', ['edit-program', 'program', 'lesson', 'play', 'finish']],
     ['reviews', 'Results', 'check', ['review']],
     ['payments', 'Payments', 'wallet'],
     ['calendar', 'Calendar', 'calendar'],
@@ -52,6 +52,7 @@ const NAV = {
 };
 const MOBILE_MAIN = { student: 5, teacher: 5 };
 const SHORT = { 'my-profile': 'Profile' }; // labels in the narrow bottom bar
+const FULL_PAGE = new Set([room.lessonRoom, room.playRoom, room.finishRoom]); // lesson pages use the whole screen
 
 function parse(hash) {
   const h = decodeURIComponent(String(hash || '').replace(/^#\/?/, ''));
@@ -98,7 +99,7 @@ async function render(navigated = false) {
     try { await loadNav(); } catch { /* the menu works without it */ }
     if (token !== renderToken) return;
   }
-  const shell = paintShell(role, name, routes[name] === playView);
+  const shell = paintShell(role, name, FULL_PAGE.has(routes[name]));
   const main = shell.querySelector('#main');
   main.innerHTML = '<div class="loading" aria-live="polite">Loading…</div>';
 
@@ -121,7 +122,6 @@ async function render(navigated = false) {
   current = view;
   document.title = view.title && view.title !== S.settings.site_name ? `${view.title}, ${S.settings.site_name}` : S.settings.site_name;
   if (!shell.dataset.keepScroll) window.scrollTo(0, 0);
-  markProgram(view.programId || '');
   try { view.mount?.(fresh); } catch (e) { console.error(e); }
   const h1 = fresh.querySelector('h1');
   if (h1 && document.activeElement === document.body) { h1.tabIndex = -1; h1.focus({ preventScroll: true }); }
@@ -133,23 +133,6 @@ function navLink([key, label, ic, also = []], name, cls = 'nav-link') {
   const badge = key === 'reviews' ? S.counts.reviews : key === 'requests' ? S.counts.requests : 0;
   const text = cls === 'tab' && SHORT[key] ? SHORT[key] : label;
   return html`<a class="${cls} ${on ? 'is-on' : ''}" href="#${key}" ${on ? 'aria-current="page"' : ''}>${icon(ic)}<span>${text}</span>${badge ? html`<span class="badge" data-badge="${key}">${badge}</span>` : html`<span class="badge" data-badge="${key}" hidden></span>`}</a>`;
-}
-
-// Programs listed in the side menu, under "Programs" / "My programs".
-function programLinks(role) {
-  const list = (S.nav && S.nav.programs) || [];
-  if (!list.length) return '';
-  const target = role === 'teacher' ? 'edit-program' : 'program';
-  return html`<div class="nav-sub" role="group" aria-label="Programs">${list.map((p) => html`<a class="nav-sublink" href="#${target}-${p.id}" data-nav-program="${p.id}">
-    <span class="nav-emoji" aria-hidden="true">${p.emoji || '📘'}</span><span class="nav-subtext">${p.title}</span>${role === 'teacher' && !p.published ? html`<span class="nav-hidden" title="Hidden from students">hidden</span>` : ''}</a>`)}</div>`;
-}
-
-function markProgram(id) {
-  document.querySelectorAll('[data-nav-program]').forEach((a) => {
-    const on = !!id && a.dataset.navProgram === id;
-    a.classList.toggle('is-on', on);
-    if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
-  });
 }
 
 function sideBalance() {
@@ -188,7 +171,7 @@ function paintShell(role, name, full) {
     <button class="skip" data-skip>Skip to content</button>
     <aside class="side" aria-label="Menu">
       <a class="brand" href="#${DEFAULT[role]}">${st.site_name}</a>
-      <nav class="side-nav">${items.map((it) => html`${navLink(it, name)}${it[0] === 'programs' ? programLinks(role) : ''}`)}</nav>
+      <nav class="side-nav">${items.map((it) => navLink(it, name))}</nav>
       <div class="side-me"><span class="avatar" aria-hidden="true">${initials(S.me.full_name || S.me.email)}</span>
         <div><strong>${S.me.full_name || 'Me'}</strong><span class="muted small">${role === 'teacher' ? 'Teacher' : S.me.level || 'Student'}</span></div>
         ${role === 'student' ? sideBalance() : ''}</div>
@@ -213,7 +196,7 @@ function paintShell(role, name, full) {
 async function updateBadges() {
   try {
     const [attempts, requests, profiles] = await Promise.all([S.api.listAttempts({ limit: 500 }), S.api.listRequests(), S.api.listProfiles()]);
-    S.counts.reviews = attempts.filter((a) => a.status === 'completed' && !a.reviewed).length;
+    S.counts.reviews = attempts.filter(needsReview).length;
     S.counts.requests = requests.filter((r) => r.status === 'new').length + profiles.filter((p) => p.status === 'pending').length;
     for (const [key, n] of [['reviews', S.counts.reviews], ['requests', S.counts.requests]]) {
       document.querySelectorAll(`[data-badge="${key}"]`).forEach((b) => { b.hidden = !n; b.textContent = n || ''; });
@@ -278,7 +261,7 @@ function newPasswordDialog() {
 async function boot() {
   S.cfg = window.SITE_CONFIG || {};
   try {
-    S.api = await createApi(S.cfg);
+    S.api = trackTreeChanges(await createApi(S.cfg));
   } catch (err) {
     console.error(err);
     app.innerHTML = html`<div class="empty"><h1>The website could not start</h1><p>It could not reach the database library. Check your internet connection and reload the page.</p></div>`.toString();

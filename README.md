@@ -4,7 +4,7 @@ A website for online English lessons:
 
 - **Students** sign in and see only their own programs, lessons and exercises, their schedule, their word list, their results with your feedback, and their balance.
 - **You (the teacher)** control everything: students, programs, lessons, exercises, the calendar, payments and balances, lesson requests and the public page.
-- **Exercises** are your usual HTML files on GitHub. The website opens them inside a lesson, reads the score and the answers automatically, saves them, and emails you.
+- **Exercises** are your usual HTML files on GitHub. The website opens them inside a lesson, reads the score and the answers automatically and saves them. When a student finishes a lesson, you get one email with the results.
 - **Visitors** see your public page, can book a lesson or send a request, and can pay with Kaspi.
 
 Everything runs on free services: GitHub Pages (the website), Supabase (the database), Resend (emails to students), FormSubmit (emails to you) and Cal.com (a booking page).
@@ -78,11 +78,36 @@ New people then pick a time themselves, and it goes straight into your Google Ca
 ## Everyday use
 
 - **New student:** *Students → Invite a student*, tick their programs. The website emails them the link (or copy it and send it yourself). They choose a password and their programs are ready. People who sign up by themselves wait on *Requests* until you approve them.
-- **Programs, lessons, exercises:** a *program* holds lessons, a lesson holds exercises (and links, videos, notes). On *Programs → Edit*, the arrows move things up and down; the ↔ button moves or copies a lesson to another program, or an exercise to another lesson. The same exercise can sit in several lessons.
-- **New exercise:** upload the HTML file to your exercises repository as usual. Then open *Exercise library → Refresh* and press *Add to a lesson*.
+- **Programs, lessons, sections:** a *program* holds lessons, and a lesson has *sections* (exercises, videos, links, notes). Students open a program and see its lessons as a numbered list. A lesson opens on its own full page, like in Edvibe: the section fills the page, and all sections of the lesson are listed on the right, with *Finish lesson* at the end. An exercise is saved as done when it shows a score or the student presses *I'm done*. *Finish lesson* sends you one email with the score of each section.
+- **Editing a program:** *Programs → Edit*. The arrows move lessons and sections up and down; the ↔ button moves or copies a lesson to another program, or a section to another lesson; the eye button opens a lesson as students see it. The same exercise can sit in several lessons.
+- **New lesson:** upload its files to GitHub in one folder (see *Organizing exercises on GitHub* below), then *Programs → Edit → New lesson from a GitHub folder*, or *Exercise library → Make a lesson from this folder*. For one new exercise: upload the file, then *Add a section* in the program editor, or *Exercise library → Add to a lesson*. If a new file does not show up, press *Refresh* in the library (GitHub needs about a minute).
 - **Lessons and reminders:** *Calendar → Schedule a lesson*. Students see their lessons on their *Schedule* page and get an email reminder (by default 1 day and 1 hour before). You can also put the lesson in Google Calendar with one button.
 - **Payments and balances:** set a default price on *Website → Payments*, and a personal price on a student's page if needed. When a student pays, press *Payment* (on *Payments* or the student's page) and enter the amount. After a lesson, press **Held** on *Today* (or *Lesson held* in the calendar): the price is taken from the balance. *Payments* shows every student's balance, what you received and earned this month, homework progress and average scores, and can be downloaded as a CSV file for Excel.
 - **Checking work:** *Results → To review*. You see the score, each answer with ✓ or ✗, the time spent, and whether the answer key was opened. Write a comment and the student sees it in red "teacher's pen" next to their answers.
+
+## Organizing exercises on GitHub
+
+Keep the exercises repository (`miro-exercises`) in folders: one folder per program, and inside it one folder per lesson, with the files numbered in the order of the lesson.
+
+```
+miro-exercises/
+├── phrasal-verbs/                      one program
+│   ├── 01-get-and-take/                one lesson: "Get and take"
+│   │   ├── 1-intro.html                section 1: "Intro"
+│   │   ├── 2-match-up.html             section 2: "Match up"
+│   │   └── 3-fill-in-the-gaps.html     section 3: "Fill in the gaps"
+│   └── 02-look-up-and-look-after/
+│       ├── 1-balloon-pop.html
+│       └── 2-unjumble.html
+└── Tamila_Part_1_Multiple_Choice.html  older files stay where they are
+```
+
+- The folder name becomes the lesson title and the file names become the section titles, in the order of their numbers (`10-…` comes after `9-…`). You can rename and reorder everything later in the program editor; GitHub does not have to change. Use letters, numbers and dashes in names (a name that starts with `_` is not published).
+- To upload a lesson: on GitHub, open the program folder, then **Add file → Upload files**, drag the whole lesson folder from your computer, and **Commit changes**. GitHub keeps the folders. For a new program, stay in the main folder and drag the program folder (with the lesson folder inside) instead.
+- Do not rename or move a file after it is used in a lesson: the lesson keeps the old address. Upload a new file instead. If it happens, the program editor marks the section "File not found on GitHub".
+- Exercises that link to each other: keep them in the same folder and link by the file name only (`<a href="2-match-up.html">`). If the linked file is also a section of the lesson, the website switches to that section, so the result is saved in the right place.
+- Older files in the main folder stay where they are, because lessons and Miro boards already use their addresses. A lesson can mix files from any folder.
+- The list page of the repository (`dashaenglish.com/miro-exercises/`) shows only the files in the main folder. The website's *Exercise library* shows every folder.
 
 ## How exercises report results
 

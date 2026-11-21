@@ -1,8 +1,9 @@
 // Teacher pages: today, students, programs, library, results, calendar, requests, website settings.
 import { html, raw, icon, toast, openModal, ask, copyText, nl2br, fmtDate, fmtDateLong, fmtTime, fmtDateTime, fmtDay, timeAgo, duration, plural, initials, sameDay, startOfWeek, addDays, startOfDay, dateInput, timeInput, setTimeFormat, esc } from './ui.js';
-import { S, go, refresh, progressIndex, courseStats, scoreText, scoreClass, gcalUrl, loadLibrary, siteUrl, teacherName, money, priceOf, hasOwnPrice, ledgerFor, balanceLevel, invalidateNav, currencySign } from './core.js';
+import { S, go, refresh, progressIndex, courseStats, scoreText, scoreClass, gcalUrl, loadLibrary, siteUrl, siteAddress, teacherName, money, priceOf, hasOwnPrice, ledgerFor, balanceLevel, invalidateNav, currencySign, needsReview, isExerciseAttempt, normUrl, folderOf, niceTitle, byName } from './core.js';
 import { tile, bar, kindIcon, agenda, answersTable, attemptFacts } from './views-student.js';
 import { paymentDialog, heldDialog, balanceCard, ledgerItems, ledgerList, ledgerActions, homeworkStats } from './views-billing.js';
+import { libraryView, lessonFromFolderDialog, flagMissingFiles, pickerList, groupFolders } from './views-library.js';
 
 const STATUS_LABEL = { active: 'Active', pending: 'Waiting for approval', paused: 'Paused', archived: 'Archived' };
 const SESSION_WORD = { scheduled: 'planned', done: 'held', missed: 'missed', cancelled: 'cancelled' };
@@ -52,7 +53,7 @@ export async function todayView() {
   const ended = (s) => new Date(s.starts_at).getTime() + (s.minutes || 60) * 60000 <= Date.now();
   const toConfirm = past.filter((s) => s.status === 'scheduled' && s.student_id && ended(s)).reverse();
   const confirmIds = new Set(toConfirm.map((s) => s.id));
-  const toReview = attempts.filter((a) => a.status === 'completed' && !a.reviewed);
+  const toReview = attempts.filter(needsReview);
   const pending = profiles.filter((p) => p.status === 'pending');
   const newReq = requests.filter((r) => r.status === 'new');
   const upcoming = sessions.filter((s) => s.status !== 'cancelled' && !confirmIds.has(s.id));
@@ -325,7 +326,7 @@ export async function studentView({ id }) {
   const [p, tree, enrollments, sessions, attempts, words, notes, payments, held, profiles] = await Promise.all([
     S.api.getProfile(id), S.api.tree(), S.api.listEnrollments(),
     S.api.listSessions({ from: addDays(new Date(), -30), student_id: id }),
-    S.api.listAttempts({ student_id: id, limit: 300 }), S.api.listWords(id), S.api.getNotes(id),
+    S.api.listAttempts({ student_id: id, limit: 300 }).then((list) => list.filter(isExerciseAttempt)), S.api.listWords(id), S.api.getNotes(id),
     S.api.listPayments({ student_id: id }), S.api.listHeld({ student_id: id }), S.api.listProfiles(),
   ]);
   if (!p) return { title: 'Not found', html: html`<div class="empty"><h1>Student not found</h1><p><a href="#students">Back to students</a></p></div>` };
@@ -445,14 +446,14 @@ export async function programEditorView() {
   return {
     title: 'Programs',
     html: html`
-      <div class="page-head row-between"><div><h1>Programs</h1><p class="lede">A program holds lessons. Each lesson holds exercises, links, videos and notes. Students see only the programs you open for them.</p></div>
+      <div class="page-head row-between"><div><h1>Programs</h1><p class="lede">A program holds lessons. A lesson has sections: exercises, videos, links and notes. Students see only the programs you open for them.</p></div>
         <button class="btn btn-primary" data-on="new">${icon('plus')} New program</button></div>
       ${tree.length ? html`<ul class="course-list">${tree.map((c, i) => {
         const n = enrollments.filter((e) => e.course_id === c.id).length;
         const items = c.lessons.reduce((s, l) => s + l.materials.length, 0);
         return html`<li class="course-row editable">${tile(c)}
           <div class="course-main"><h2><a href="#edit-program-${c.id}">${c.title}</a></h2>
-            <p class="muted small">${plural(c.lessons.length, 'lesson')}, ${plural(items, 'item')}, ${plural(n, 'student')}${c.level ? `, ${c.level}` : ''}</p>
+            <p class="muted small">${plural(c.lessons.length, 'lesson')}, ${plural(items, 'section')}, ${plural(n, 'student')}${c.level ? `, ${c.level}` : ''}</p>
             ${c.published ? '' : html`<span class="chip chip-pending">Hidden from students</span>`}</div>
           <div class="row-gap">
             <span class="ed-tools hide-sm">
@@ -512,8 +513,9 @@ export async function editProgramView({ id }) {
   const lessonBlock = (l, i) => html`<li class="ed-lesson">
     <div class="ed-lesson-head">
       <span class="margin-num">${i + 1}</span>
-      <div class="ed-title"><h3>${l.title}</h3>${l.published ? '' : html`<span class="chip chip-pending">Draft, hidden</span>`}${l.description ? html`<p class="muted small">${l.description}</p>` : ''}</div>
+      <div class="ed-title"><h3>${l.title}</h3>${l.published ? '' : html`<span class="chip chip-pending">Draft, hidden</span>`}${l.description ? html`<p class="muted small">${l.description}</p>` : ''}<p class="muted small">${plural(l.materials.length, 'section')}</p></div>
       <div class="ed-tools">
+        <a class="icon-btn" href="#lesson-${l.id}" aria-label="Open the lesson as students see it" title="Open as students see it">${icon('eye')}</a>
         <button class="icon-btn" data-on="lesson-up" data-i="${i}" aria-label="Move lesson up" title="Move up" ${i === 0 ? 'disabled' : ''}>${icon('up')}</button>
         <button class="icon-btn" data-on="lesson-down" data-i="${i}" aria-label="Move lesson down" title="Move down" ${i === course.lessons.length - 1 ? 'disabled' : ''}>${icon('down')}</button>
         <button class="icon-btn" data-on="lesson-move" data-i="${i}" aria-label="Move or copy to another program" title="Move or copy to another program">${icon('move')}</button>
@@ -521,17 +523,17 @@ export async function editProgramView({ id }) {
         <button class="icon-btn" data-on="lesson-del" data-i="${i}" aria-label="Delete lesson" title="Delete">${icon('trash')}</button>
       </div>
     </div>
-    <ul class="ed-materials">${l.materials.map((mat, k) => html`<li>
-      ${kindIcon(mat.kind)}<div class="ed-mat-main"><span>${mat.title}</span>${mat.url ? html`<span class="muted small ellipsis">${mat.url}</span>` : ''}</div>
+    <ul class="ed-materials">${l.materials.map((mat, k) => html`<li ${mat.kind === 'exercise' && mat.url ? html`data-check-url="${mat.url}"` : ''}>
+      <span class="ed-num">${k + 1}</span>${kindIcon(mat.kind)}<div class="ed-mat-main"><span>${mat.title}</span>${mat.url ? html`<span class="muted small ellipsis">${shortUrl(mat.url)}</span>` : ''}</div>
       <div class="ed-tools">
-        ${mat.kind === 'exercise' ? html`<a class="icon-btn" href="#play-${mat.id}" aria-label="Preview" title="Preview">${icon('play')}</a>` : ''}
+        <a class="icon-btn" href="#play-${mat.id}" aria-label="Preview this section" title="Preview">${icon('play')}</a>
         <button class="icon-btn" data-on="mat-up" data-i="${i}" data-k="${k}" aria-label="Move up" title="Move up" ${k === 0 ? 'disabled' : ''}>${icon('up')}</button>
         <button class="icon-btn" data-on="mat-down" data-i="${i}" data-k="${k}" aria-label="Move down" title="Move down" ${k === l.materials.length - 1 ? 'disabled' : ''}>${icon('down')}</button>
-        <button class="icon-btn" data-on="mat-move" data-i="${i}" data-k="${k}" aria-label="Move or copy to another lesson" title="Move or copy to another lesson">${icon('move')}</button>
+        <button class="icon-btn" data-on="mat-move" data-i="${i}" data-k="${k}" aria-label="Move or copy this section to another lesson" title="Move or copy to another lesson">${icon('move')}</button>
         <button class="icon-btn" data-on="mat-edit" data-i="${i}" data-k="${k}" aria-label="Edit" title="Edit">${icon('edit')}</button>
         <button class="icon-btn" data-on="mat-del" data-i="${i}" data-k="${k}" aria-label="Remove" title="Remove">${icon('trash')}</button>
       </div></li>`)}
-      <li class="ed-add"><button class="btn btn-sm" data-on="mat-add" data-i="${i}">${icon('plus')} Add exercise, link, video or note</button></li>
+      <li class="ed-add"><button class="btn btn-sm" data-on="mat-add" data-i="${i}">${icon('plus')} Add a section</button><span class="muted small">an exercise from GitHub, a video, a link or a text</span></li>
     </ul>
   </li>`;
 
@@ -549,7 +551,9 @@ export async function editProgramView({ id }) {
         : html`<p class="muted small">Nobody yet. Add students so they can see this program.</p>`}
       </section>
 
-      <section><div class="row-between"><h2 class="section-title">Lessons</h2><button class="btn btn-sm btn-primary" data-on="lesson-add">${icon('plus')} Add a lesson</button></div>
+      <section><div class="row-between"><h2 class="section-title">Lessons</h2>
+          <div class="row-gap"><button class="btn btn-sm" data-on="lesson-folder">${icon('folder')} New lesson from a GitHub folder</button><button class="btn btn-sm btn-primary" data-on="lesson-add">${icon('plus')} Add a lesson</button></div></div>
+        <p class="muted small">Each lesson has sections. Students see them listed beside the lesson and go through them one by one.</p>
         ${course.lessons.length ? html`<ol class="ed-lessons">${course.lessons.map(lessonBlock)}</ol>` : html`<p class="muted">No lessons yet. Add the first lesson, then put exercises in it.</p>`}
       </section>
       <p class="danger-zone"><button class="btn btn-ghost btn-danger-text" data-on="delete">${icon('trash')} Delete this program</button></p>`,
@@ -572,11 +576,12 @@ export async function editProgramView({ id }) {
       },
       async unenroll(el) { await S.api.setEnrollment(id, el.dataset.id, false); toast('Removed from program'); refresh(); },
       'lesson-add': () => lessonDialog(course),
+      'lesson-folder': () => lessonFromFolderDialog({ course, tree }),
       'lesson-edit': (el) => lessonDialog(course, course.lessons[+el.dataset.i]),
       'lesson-move': (el) => lessonMoveDialog(tree, course, course.lessons[+el.dataset.i]),
       async 'lesson-del'(el) {
         const l = course.lessons[+el.dataset.i];
-        if (!(await ask(`Delete lesson "${l.title}"?`, { ok: 'Delete lesson', danger: true, detail: 'Its exercises are removed from the program. Student results stay in Results.' }))) return;
+        if (!(await ask(`Delete lesson "${l.title}"?`, { ok: 'Delete lesson', danger: true, detail: 'Its sections are removed from the program. The files stay on GitHub, and student results stay in Results.' }))) return;
         await S.api.deleteLesson(l.id); refresh();
       },
       async 'lesson-up'(el) { await reorder(course.lessons, +el.dataset.i, -1, S.api.saveLesson); refresh(); },
@@ -592,7 +597,13 @@ export async function editProgramView({ id }) {
         await S.api.deleteMaterial(mat.id); refresh();
       },
     },
+    mount() { flagMissingFiles().catch(() => {}); },
   };
+}
+
+// "https://dashaenglish.com/miro-exercises/a/b.html" -> "miro-exercises/a/b.html"
+function shortUrl(u) {
+  try { const x = new URL(u); let p = x.pathname.replace(/^\//, ''); try { p = decodeURIComponent(p); } catch { /* keep */ } return /dashaenglish\.com$|github\.io$/.test(x.hostname) ? p : `${x.hostname}${x.pathname}`; } catch { return u; }
 }
 
 // Move a lesson to another program (students' results come along), or copy it.
@@ -626,14 +637,14 @@ function lessonMoveDialog(tree, course, lesson) {
 }
 
 // Move an exercise (or link, video, note) to another lesson, or copy it.
-function materialMoveDialog(tree, lesson, mat) {
+function materialMoveDialog(tree, lesson, mat) { // a section
   const m = openModal({
     title: `Move or copy "${mat.title}"`,
     body: html`<form class="form" data-submit="go">
       <label>Lesson<select name="target">${tree.filter((c) => c.lessons.length).map((c) => html`<optgroup label="${c.title}">${c.lessons.map((l) => html`<option value="${l.id}" ${l.id === lesson.id ? 'selected' : ''}>${l.title}${l.id === lesson.id ? ' (here now)' : ''}</option>`)}</optgroup>`)}</select></label>
       <fieldset><legend>What to do</legend>
         <label class="check"><input type="radio" name="how" value="move" checked> Move it there. Students' results move with it.</label>
-        <label class="check"><input type="radio" name="how" value="copy"> Copy it there. Both lessons will have this exercise.</label>
+        <label class="check"><input type="radio" name="how" value="copy"> Copy it there. Both lessons will have this section.</label>
       </fieldset>
       <div class="row-end"><button class="btn" type="button" data-on="close">Cancel</button><button class="btn btn-primary" type="submit">Do it</button></div></form>`,
     submit: {
@@ -681,29 +692,21 @@ function materialDialog(lesson, mat = null) {
   let tab = mat ? (mat.kind === 'text' ? 'text' : 'link') : 'library';
   let lib = null;
   let q = '';
-  const libList = () => {
-    if (!lib) return html`<p class="muted">Loading your exercises from GitHub…</p>`;
-    if (lib.error && !lib.items.length) return html`<p class="notice notice-warn small">${lib.error}</p>`;
-    const rows = lib.items.filter((x) => !q || `${x.title} ${x.file}`.toLowerCase().includes(q.toLowerCase()));
-    return rows.length ? html`<ul class="pick-list">${rows.map((x) => html`<li><div><strong>${x.title}</strong><span class="muted small">${x.file}</span></div>
-      <div class="row-gap"><a class="btn btn-sm btn-ghost" href="${x.url}" target="_blank" rel="noopener">Preview</a><button class="btn btn-sm btn-primary" data-on="pick" data-url="${x.url}" data-title="${x.title}">Add</button></div></li>`)}</ul>`
-      : html`<p class="muted">No exercises match.</p>`;
-  };
   const body = () => html`
     ${mat ? '' : html`<div class="seg" role="tablist">
       <button class="seg-btn ${tab === 'library' ? 'is-on' : ''}" data-on="tab" data-t="library">From my exercises</button>
       <button class="seg-btn ${tab === 'link' ? 'is-on' : ''}" data-on="tab" data-t="link">Link or video</button>
-      <button class="seg-btn ${tab === 'text' ? 'is-on' : ''}" data-on="tab" data-t="text">Text note</button></div>`}
-    ${tab === 'library' ? html`<input type="search" placeholder="Search exercises" data-input="q" value="${q}" aria-label="Search exercises"><div id="lib-box">${libList()}</div>
-      <p class="muted small">This list comes from your GitHub. Upload a new HTML exercise there and it appears here.</p>` : ''}
+      <button class="seg-btn ${tab === 'text' ? 'is-on' : ''}" data-on="tab" data-t="text">Text</button></div>`}
+    ${tab === 'library' ? html`<input type="search" placeholder="Search exercises" data-input="q" value="${q}" aria-label="Search exercises"><div id="lib-box">${pickerList(lib, q)}</div>
+      <p class="muted small">Your exercise files on GitHub, by folder. Upload new files there and they appear here.</p>` : ''}
     ${tab === 'link' ? html`<form class="form" data-submit="link">
-      <label>Title<input name="title" value="${mat?.title || ''}" required maxlength="300"></label>
+      <label>Section title<input name="title" value="${mat?.title || ''}" required maxlength="300"></label>
       <label>Link<input name="url" type="url" value="${mat?.url || ''}" required placeholder="https://…"></label>
-      <label>Type<select name="kind">${[['auto', 'Choose from the link'], ['exercise', 'Exercise (opens inside the website, results are saved)'], ['video', 'Video (YouTube links play inside the lesson)'], ['link', 'Link (opens in a new tab)']].filter(([v]) => !mat || v !== 'auto').map(([v, t]) => html`<option value="${v}" ${(mat?.kind || 'auto') === v ? 'selected' : ''}>${t}</option>`)}</select></label>
+      <label>Type<select name="kind">${[['auto', 'Choose from the link'], ['exercise', 'Exercise (opens inside the lesson, results are saved)'], ['video', 'Video (YouTube links play inside the lesson)'], ['link', 'Link (opens in a new tab)']].filter(([v]) => !mat || v !== 'auto').map(([v, t]) => html`<option value="${v}" ${(mat?.kind || 'auto') === v ? 'selected' : ''}>${t}</option>`)}</select></label>
       <div class="row-end"><button class="btn btn-primary" type="submit">${mat ? 'Save' : 'Add to lesson'}</button></div></form>` : ''}
     ${tab === 'text' ? html`<form class="form" data-submit="text">
-      <label>Title<input name="title" value="${mat?.title || ''}" required maxlength="300" placeholder="For example: Homework"></label>
-      <label>Text<textarea name="body" rows="6" maxlength="5000">${mat?.body || ''}</textarea></label>
+      <label>Section title<input name="title" value="${mat?.title || ''}" required maxlength="300" placeholder="For example: Intro or Homework"></label>
+      <label>Text<textarea name="body" rows="7" maxlength="5000">${mat?.body || ''}</textarea></label>
       <div class="row-end"><button class="btn btn-primary" type="submit">${mat ? 'Save' : 'Add to lesson'}</button></div></form>` : ''}`;
   const sortNext = lesson.materials.length;
   const saveMat = async (o) => {
@@ -711,14 +714,20 @@ function materialDialog(lesson, mat = null) {
     m.close(); toast(mat ? 'Saved' : 'Added to the lesson'); refresh();
   };
   const m = openModal({
-    title: mat ? 'Edit item' : `Add to "${lesson.title}"`,
+    title: mat ? 'Edit section' : `Add a section to "${lesson.title}"`,
     wide: true,
     body: body(),
     on: {
       tab(el) { tab = el.dataset.t; m.setBody(body()); if (tab === 'library') fill(); },
       pick: (el) => saveMat({ kind: 'exercise', title: el.dataset.title, url: el.dataset.url, body: '' }),
+      async 'pick-all'(el) {
+        const g = groupFolders(lib.items).find((x) => x.key === el.dataset.key);
+        if (!g) return;
+        await Promise.all(g.items.map((x, i) => S.api.saveMaterial({ lesson_id: lesson.id, kind: 'exercise', title: niceTitle(x.file), url: x.url, body: '', sort: sortNext + i })));
+        m.close(); toast(`${plural(g.items.length, 'section')} added`); refresh();
+      },
     },
-    input: { q(el) { q = el.value; const box = document.getElementById('lib-box'); if (box) box.innerHTML = libList().toString(); } },
+    input: { q(el) { q = el.value; const box = document.getElementById('lib-box'); if (box) box.innerHTML = pickerList(lib, q).toString(); } },
     submit: {
       link(d) {
         const url = d.url.trim();
@@ -731,86 +740,22 @@ function materialDialog(lesson, mat = null) {
   const fill = async () => {
     if (!lib) lib = await loadLibrary();
     const box = document.getElementById('lib-box');
-    if (box) box.innerHTML = libList().toString();
+    if (box) box.innerHTML = pickerList(lib, q).toString();
   };
   if (tab === 'library') fill();
-}
-
-// =====================================================================
-// Exercise library
-// =====================================================================
-export async function libraryView() {
-  const [lib, tree] = await Promise.all([loadLibrary(), S.api.tree()]);
-  const usedIn = new Map();
-  for (const c of tree) for (const l of c.lessons) for (const mat of l.materials) {
-    if (!mat.url) continue;
-    const key = mat.url.split('#')[0];
-    usedIn.set(key, [...(usedIn.get(key) || []), `${c.title}, ${l.title}`]);
-  }
-  let q = '';
-  const list = () => {
-    const rows = lib.items.filter((x) => !q || `${x.title} ${x.file}`.toLowerCase().includes(q.toLowerCase()));
-    if (!rows.length) return html`<p class="muted empty-sm">${lib.items.length ? 'No exercises match.' : 'No HTML exercises found in your GitHub folders.'}</p>`;
-    return html`<ul class="lib-list">${rows.map((x) => {
-      const used = usedIn.get(x.url) || [];
-      return html`<li><div class="lib-main"><strong>${x.title}</strong><span class="muted small">${x.file}</span>
-        <span class="small ${used.length ? '' : 'muted'}">${used.length ? `Used in: ${used.join('; ')}` : 'Not used in a program yet'}</span></div>
-        <div class="row-gap"><a class="btn btn-sm btn-ghost" href="${x.url}" target="_blank" rel="noopener">${icon('external')} Preview</a>
-          <button class="btn btn-sm btn-primary" data-on="add" data-url="${x.url}" data-title="${x.title}">Add to a lesson</button></div></li>`;
-    })}</ul>`;
-  };
-  return {
-    title: 'Exercise library',
-    html: html`
-      <div class="page-head row-between"><div><h1>Exercise library</h1>
-        <p class="lede">Your HTML exercises on GitHub (${S.settings.exercise_repos}). Upload a new file there, then press Refresh. The same exercise can be used in several lessons.</p></div>
-        <button class="btn" data-on="reload">Refresh</button></div>
-      ${lib.error ? html`<p class="notice notice-warn small">${lib.error}</p>` : ''}
-      <input type="search" class="search-wide" placeholder="Search ${plural(lib.items.length, 'exercise')}" data-input="q" aria-label="Search exercises">
-      <div id="lib-list">${list()}</div>`,
-    input: { q(el) { q = el.value; document.getElementById('lib-list').innerHTML = list().toString(); } },
-    on: {
-      async reload() { await loadLibrary(true); refresh(); },
-      add(el) { addToLessonDialog(tree, { url: el.dataset.url, title: el.dataset.title }); },
-    },
-  };
-}
-
-function addToLessonDialog(tree, item) {
-  if (!tree.length || !tree.some((c) => c.lessons.length)) {
-    openModal({ title: 'Add to a lesson', body: html`<p>Create a program with at least one lesson first.</p><div class="row-end"><a class="btn btn-primary" href="#programs">Go to Programs</a></div>` });
-    return;
-  }
-  const withLessons = tree.filter((c) => c.lessons.length);
-  const lessonOptions = (cid) => (withLessons.find((c) => c.id === cid)?.lessons || []).map((l) => html`<option value="${l.id}">${l.title}</option>`);
-  const m = openModal({
-    title: 'Add to a lesson',
-    body: html`<form class="form" data-submit="add">
-      <label>Title students see<input name="title" value="${item.title}" required maxlength="300"></label>
-      <label>Program<select name="course" data-change="course">${withLessons.map((c) => html`<option value="${c.id}">${c.title}</option>`)}</select></label>
-      <label>Lesson<select name="lesson" id="lesson-pick">${lessonOptions(withLessons[0].id)}</select></label>
-      <div class="row-end"><button class="btn" type="button" data-on="close">Cancel</button><button class="btn btn-primary" type="submit">Add</button></div></form>`,
-    change: { course(el) { document.getElementById('lesson-pick').innerHTML = html`${lessonOptions(el.value)}`.toString(); } },
-    submit: {
-      async add(d) {
-        const lesson = withLessons.flatMap((c) => c.lessons).find((l) => l.id === d.lesson);
-        await S.api.saveMaterial({ lesson_id: d.lesson, kind: 'exercise', title: d.title.trim(), url: item.url, body: '', sort: lesson ? lesson.materials.length : 0 });
-        m.close(); toast(`Added to "${lesson?.title}"`); refresh();
-      },
-    },
-  });
 }
 
 // =====================================================================
 // Results (review)
 // =====================================================================
 export async function reviewsView() {
-  const [attempts, profiles] = await Promise.all([S.api.listAttempts({ limit: 500 }), S.api.listProfiles()]);
+  const [all, profiles] = await Promise.all([S.api.listAttempts({ limit: 500 }), S.api.listProfiles()]);
+  const attempts = all.filter(isExerciseAttempt); // readings and videos are only marked as seen
   const name = nameOf(profiles);
-  let filter = attempts.some((a) => a.status === 'completed' && !a.reviewed) ? 'review' : 'all';
+  let filter = attempts.some(needsReview) ? 'review' : 'all';
   let who = '';
-  const match = (a) => (filter === 'review' ? a.status === 'completed' && !a.reviewed : filter === 'progress' ? a.status === 'in_progress' : true) && (!who || a.student_id === who);
-  const count = (f) => attempts.filter((a) => (f === 'review' ? a.status === 'completed' && !a.reviewed : f === 'progress' ? a.status === 'in_progress' : true)).length;
+  const match = (a) => (filter === 'review' ? needsReview(a) : filter === 'progress' ? a.status === 'in_progress' : true) && (!who || a.student_id === who);
+  const count = (f) => attempts.filter((a) => (f === 'review' ? needsReview(a) : f === 'progress' ? a.status === 'in_progress' : true)).length;
   const list = () => {
     const rows = attempts.filter(match);
     if (!rows.length) return html`<p class="muted empty-sm">${filter === 'review' ? 'Nothing waiting for review.' : 'No results yet.'}</p>`;
@@ -844,7 +789,7 @@ export async function reviewView({ id }) {
   const [a, profiles, attempts] = await Promise.all([S.api.getAttempt(id), S.api.listProfiles(), S.api.listAttempts({ limit: 500 })]);
   if (!a) return { title: 'Not found', html: html`<div class="empty"><h1>Result not found</h1><p><a href="#reviews">Back to results</a></p></div>` };
   const student = profiles.find((p) => p.id === a.student_id);
-  const nextUp = attempts.find((x) => x.id !== a.id && x.status === 'completed' && !x.reviewed);
+  const nextUp = attempts.find((x) => x.id !== a.id && needsReview(x));
   const save = async (feedback, goNext) => {
     await S.api.updateAttempt(a.id, { feedback: feedback || null, feedback_at: feedback ? new Date().toISOString() : null, reviewed: true, feedback_seen: false });
     toast(feedback ? 'Feedback saved. The student will see it and get an email.' : 'Marked as reviewed');
@@ -1058,7 +1003,7 @@ export function siteSetupView() {
         </fieldset>
         <fieldset class="card-plain"><legend>Emails to you</legend>
           <label>Send notifications to<input name="notify_email" type="email" value="${st.notify_email}" placeholder="you@gmail.com"></label>
-          <label class="check"><input type="checkbox" name="notify_on_finish" ${st.notify_on_finish !== false ? 'checked' : ''}> When a student finishes an exercise (with score and answers)</label>
+          <label class="check"><input type="checkbox" name="notify_on_finish" ${st.notify_on_finish !== false ? 'checked' : ''}> When a student finishes a lesson (with the score of each exercise)</label>
           <label class="check"><input type="checkbox" name="notify_on_request" ${st.notify_on_request !== false ? 'checked' : ''}> When someone asks for a lesson or creates an account</label>
           <p class="muted small">These are sent through FormSubmit, a free service. The first time, FormSubmit emails you a confirmation link. Click it once and notifications start.</p>
         </fieldset>
@@ -1102,4 +1047,4 @@ export function siteSetupView() {
   };
 }
 
-export { esc, raw, fmtDateTime, duration, bar };
+export { esc, raw, fmtDateTime, duration, bar, libraryView };

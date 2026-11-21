@@ -1,6 +1,6 @@
 // Student pages: programs, lessons, schedule, words, results, profile and balance.
 import { html, icon, toast, openModal, nl2br, fmtDate, fmtDateLong, fmtTime, fmtDateTime, timeAgo, duration, pct, plural, sameDay, ask } from './ui.js';
-import { S, go, refresh, isTeacher, progressIndex, lessonDone, courseStats, findLesson, scoreText, scoreClass, gcalUrl, icsText, downloadText, youtubeId, teacherName, money, priceOf, ledgerFor, balanceLevel, invalidateNav } from './core.js';
+import { S, go, refresh, isTeacher, progressIndex, lessonDone, courseStats, scoreText, scoreClass, gcalUrl, icsText, downloadText, teacherName, money, priceOf, ledgerFor, balanceLevel, invalidateNav, isExerciseAttempt } from './core.js';
 import { balanceCard, ledgerItems, ledgerList } from './views-billing.js';
 
 // ---------- shared pieces ----------
@@ -95,96 +95,45 @@ export async function programView({ id }) {
   const idx = progressIndex(attempts);
   const st = courseStats(course, idx);
   const teacher = isTeacher();
+  let q = '';
+
+  const card = (l, i) => {
+    const total = l.materials.length;
+    const done = teacher ? 0 : l.materials.filter((m) => idx.get(m.id)?.done).length;
+    const started = !teacher && l.materials.some((m) => idx.get(m.id));
+    const finished = !teacher && lessonDone(l, idx);
+    const state = finished ? 'done' : started ? 'started' : '';
+    return html`<li data-title="${l.title.toLowerCase()}"><a class="lesson-card ${state ? `is-${state}` : ''}" href="#lesson-${l.id}">
+      <span class="lesson-tile" aria-hidden="true">${i + 1}</span>
+      <span class="lesson-card-main"><span class="tile-label">Lesson ${i + 1}</span><strong>${l.title}</strong>
+        <span class="muted small">${plural(total, 'section')}${started && !finished ? `, ${done} done` : ''}${teacher && !l.published ? ', hidden draft' : ''}</span></span>
+      ${finished ? html`<span class="chip chip-good hide-sm">${icon('check')} Completed</span>` : started ? html`<span class="chip chip-fair hide-sm">In progress</span>` : ''}
+      <span class="btn btn-sm ${finished ? '' : 'btn-primary'} lesson-open">${finished ? 'Review' : started ? 'Continue' : 'Open lesson'}${icon('next')}</span>
+    </a></li>`;
+  };
+
   return {
     title: course.title,
-    programId: course.id,
     html: html`
       <nav class="crumbs"><a href="#programs">${teacher ? 'Programs' : 'My programs'}</a></nav>
       <div class="page-head with-tile">${tile(course, 'tile-lg')}<div><h1>${course.title}</h1>${course.description ? html`<p class="lede">${course.description}</p>` : ''}</div></div>
       ${teacher ? html`<p class="notice small">This is what students see. <a href="#edit-program-${course.id}">Edit this program</a></p>` : html`
         <div class="course-progress wide">${bar(st.done, st.total)}<span>${st.done} of ${plural(st.total, 'lesson')} completed</span></div>`}
-      ${course.lessons.length ? html`<ol class="lesson-list">${course.lessons.map((l, i) => {
-        const done = !teacher && lessonDone(l, idx);
-        const started = !teacher && l.materials.some((m) => idx.has(m.id));
-        const ex = l.materials.filter((m) => m.kind === 'exercise').length;
-        return html`<li><a class="lesson-row ${done ? 'is-done' : ''}" href="#lesson-${l.id}">
-          <span class="margin-num">${i + 1}</span>
-          <div class="lesson-main"><h3><span class="hl">${l.title}</span>${done ? html`<span class="tick" aria-label="completed">✓</span>` : ''}</h3>
-            <p class="muted small">${ex ? plural(ex, 'exercise') : plural(l.materials.length, 'item')}${!teacher && !done && started ? ', in progress' : ''}${teacher && !l.published ? ', draft (hidden from students)' : ''}</p></div>
-        </a></li>`;
-      })}</ol>` : html`<div class="empty"><p>No lessons in this program yet.</p></div>`}`,
-  };
-}
-
-// ---------- One lesson ----------
-export async function lessonView({ id }) {
-  const [tree, attempts] = await Promise.all([S.api.tree(), isTeacher() ? [] : S.api.listAttempts({ student_id: S.me.id })]);
-  const found = findLesson(tree, id);
-  if (!found) return missing('This lesson is not available', 'programs');
-  const { course, lesson, index } = found;
-  const teacher = isTeacher();
-  let idx = progressIndex(attempts);
-  const nextLesson = course.lessons[index + 1];
-
-  const statusOf = (m) => {
-    if (teacher) return '';
-    const p = idx.get(m.id);
-    if (!p) return html`<span class="status">Not started</span>`;
-    if (p.done) {
-      const a = p.completed;
-      const fb = p.attempts.find((x) => x.feedback && !x.feedback_seen) || p.attempts.find((x) => x.feedback);
-      return html`<span class="status status-done">✓ Done${a.score != null ? html` <span class="score ${scoreClass(a)}">${scoreText(a)}</span>` : ''}</span>
-        ${fb ? html`<a class="fb-link ${fb.feedback_seen ? '' : 'is-new'}" href="#result-${fb.id}">${fb.feedback_seen ? 'Feedback' : 'New feedback'}</a>` : ''}`;
-    }
-    return html`<span class="status status-progress">In progress${p.last.score != null ? ` (${scoreText(p.last)})` : ''}</span>`;
-  };
-
-  const item = (m, i) => {
-    const p = idx.get(m.id);
-    let action = '';
-    if (m.kind === 'exercise') {
-      action = html`<a class="btn ${p?.done ? '' : 'btn-primary'} btn-sm" href="#play-${m.id}">${p?.done ? 'Do again' : p ? 'Continue' : 'Start'}</a>`;
-    } else if (m.kind === 'link') {
-      action = html`<a class="btn btn-sm" href="${m.url}" target="_blank" rel="noopener">${icon('external')} Open</a>`;
-    }
-    const markBtn = !teacher && m.kind !== 'exercise' && !p?.done ? html`<button class="btn btn-sm btn-ghost" data-on="mark" data-id="${m.id}">${icon('check')} Mark as done</button>` : '';
-    const vid = m.kind === 'video' ? youtubeId(m.url) : '';
-    return html`<li class="material">
-      <span class="margin-num">${i + 1}</span>
-      <div class="material-main">
-        <div class="material-head">${kindIcon(m.kind)}<h3>${m.title}</h3></div>
-        <div class="material-status">${statusOf(m)}</div>
-        ${m.kind === 'text' ? html`<div class="note-box">${nl2br(m.body)}</div>` : ''}
-        ${m.kind === 'video' ? (vid
-          ? html`<div class="video"><iframe src="https://www.youtube-nocookie.com/embed/${vid}" title="${m.title}" loading="lazy" allow="accelerometer; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`
-          : html`<p><a href="${m.url}" target="_blank" rel="noopener">${icon('video')} Watch the video</a></p>`) : ''}
-        ${m.kind === 'link' ? html`<p class="muted small">${hostOf(m.url)}</p>` : ''}
-      </div>
-      <div class="material-actions">${action}${markBtn}</div>
-    </li>`;
-  };
-
-  return {
-    title: lesson.title,
-    programId: course.id,
-    html: html`
-      <nav class="crumbs"><a href="#programs">${teacher ? 'Programs' : 'My programs'}</a> / <a href="#program-${course.id}">${course.title}</a></nav>
-      <div class="page-head"><p class="muted">Lesson ${index + 1}</p><h1>${lesson.title}</h1>${lesson.description ? html`<p class="lede">${lesson.description}</p>` : ''}</div>
-      ${teacher ? html`<p class="notice small">This is what students see. <a href="#edit-program-${course.id}">Edit this lesson</a></p>` : ''}
-      ${lesson.materials.length ? html`<ol class="material-list">${lesson.materials.map(item)}</ol>` : html`<div class="empty"><p>Nothing in this lesson yet.</p></div>`}
-      ${nextLesson ? html`<p class="next-link"><a class="btn" href="#lesson-${nextLesson.id}">Next lesson: ${nextLesson.title}</a></p>` : ''}`,
-    on: {
-      async mark(el) {
-        const m = lesson.materials.find((x) => x.id === el.dataset.id);
-        await S.api.createAttempt({ material_id: m.id, material_title: m.title, status: 'completed', finished_at: new Date().toISOString() });
-        toast('Marked as done');
-        refresh();
+      ${course.lessons.length > 6 ? html`<input type="search" class="search-wide" placeholder="Search lessons" data-input="q" aria-label="Search lessons">` : ''}
+      ${course.lessons.length ? html`<ol class="lesson-cards" style="--prog:${course.color || '#1f4fd1'}">${course.lessons.map(card)}</ol>
+        <p class="muted small empty-sm" id="no-lessons" hidden>No lessons match.</p>`
+        : html`<div class="empty"><p>No lessons in this program yet.</p></div>`}`,
+    input: {
+      q(el) {
+        q = el.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('.lesson-cards > li').forEach((li) => { const ok = !q || li.dataset.title.includes(q); li.hidden = !ok; if (ok) shown += 1; });
+        const none = document.getElementById('no-lessons');
+        if (none) none.hidden = shown > 0;
       },
     },
   };
 }
-
-function hostOf(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } }
 
 function missing(title, back) {
   return { title, html: html`<div class="empty"><h1>${title}</h1><p>It may have been moved or hidden. <a href="#${back}">Go back</a></p></div>` };
@@ -309,7 +258,7 @@ function practice(source, onLearned) {
 
 // ---------- Results ----------
 export async function resultsView() {
-  const attempts = await S.api.listAttempts({ student_id: S.me.id, limit: 200 });
+  const attempts = (await S.api.listAttempts({ student_id: S.me.id, limit: 200 })).filter(isExerciseAttempt);
   return {
     title: 'My results',
     html: html`<div class="page-head"><h1>My results</h1><p class="lede">Every exercise you worked on, with ${teacherName()}'s feedback.</p></div>
