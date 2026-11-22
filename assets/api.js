@@ -621,6 +621,9 @@ export function createDemoApi(cfg) {
 }
 
 export async function createApi(cfg) {
-  if (cfg.supabaseUrl && cfg.supabaseKey) return createLiveApi(cfg);
+  // "?demo" in the address (https://dashaenglish.com/?demo) opens the website with
+  // sample data kept in this browser only, to try out changes. Real data is not touched.
+  const demo = new URLSearchParams(location.search).has('demo');
+  if (!demo && cfg.supabaseUrl && cfg.supabaseKey) return createLiveApi(cfg);
   return createDemoApi(cfg);
 }

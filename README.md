@@ -9,6 +9,8 @@ A website for online English lessons:
 
 Everything runs on free services: GitHub Pages (the website), Supabase (the database), Resend (emails to students), FormSubmit (emails to you) and Cal.com (a booking page).
 
+**Managing the website with ChatGPT:** the full guide for Dasha and her AI assistant is [`docs/WEBSITE-GUIDE.md`](docs/WEBSITE-GUIDE.md). The text for the ChatGPT project's instructions is [`docs/CHATGPT-PROJECT-INSTRUCTIONS.md`](docs/CHATGPT-PROJECT-INSTRUCTIONS.md). Rules for coding agents such as Codex: [`AGENTS.md`](AGENTS.md).
+
 ## Current setup
 
 - **Website:** https://dashaenglish.com (this repository, published with GitHub Pages). The old address https://dasha-english-teacher.github.io redirects there.
@@ -17,18 +19,20 @@ Everything runs on free services: GitHub Pages (the website), Supabase (the data
 - **Booking page:** Cal.com event **Trial lesson** (30 minutes): https://cal.com/dasha-teacher/trial-lesson. Still to do in Cal.com: set the real teaching hours (*Availability*) and connect Google Calendar (*Apps → Calendar*) so busy times are hidden.
   **If you change the Cal.com username or the event link, also update *Booking page link* on the website's Website page.** Otherwise the booking calendar shows "404, this page does not exist".
 - **Emails to you:** sent through FormSubmit to the address on the website's *Website* page.
-- **Emails to students:** sent from `lessons@dashaenglish.com` through **Resend** (account: Dasha's GitHub, free plan: 100 emails a day, 3,000 a month). Replies go to Dasha's Gmail. The Resend key is stored in Supabase: *Integrations → Vault → Secrets*, named `resend_api_key`. DNS records for Resend at Porkbun: TXT `resend._domainkey`, CNAME `send` and `rsend`, TXT `_dmarc`. Do not delete them.
+- **Emails to students:** sent from `lessons@dashaenglish.com` through **Resend** (account: Dasha's GitHub, free plan: 100 emails a day, 3,000 a month). Replies go to Dasha's Gmail. The Resend key is stored in Supabase: *Integrations → Vault → Secrets*, named `resend_api_key`. "Forgot password" emails also go through Resend (Supabase → *Authentication → Emails → SMTP Settings*, with a second Resend key). If a Resend key is replaced, update it in both places. DNS records for Resend at Porkbun: TXT `resend._domainkey`, CNAME `send` and `rsend`, TXT `_dmarc`. Do not delete them.
 - **Payments:** Kaspi link https://pay.kaspi.kz/pay/5rtd4cl9 and the QR code `assets/kaspi-qr.png`, shown on the *Pay* page (`dashaenglish.com/#pay`) and on each student's profile.
 
-Steps 1, 2 and 5 below are already done. They stay here in case you ever need to set things up again.
+Steps 1, 2, 3 and 5 below are done. In step 4, check once that *Send notifications to* has Dasha's email. The steps stay here in case you ever need to set things up again.
 
 ## What is in this folder
 
 | File or folder | What it is |
 |---|---|
-| `index.html`, `config.js`, `assets/` | The website itself |
+| `index.html`, `config.js`, `assets/` | The website itself. `assets/theme.css` holds the colors and fonts for the website and new exercises |
 | `supabase/schema.sql` | Sets up the database. Run it once; run it again after an update (it keeps your data). |
-| `exercise-kit/` | How to make new exercises send their score (a sentence for your AI prompt and an example) |
+| `exercise-kit/` | Rules for making exercises with ChatGPT, and two working examples |
+| `docs/` | The full guide and the ChatGPT project instructions |
+| `AGENTS.md` | Rules for AI coding agents (Codex) |
 | `.github/workflows/keep-alive.yml` | Keeps the free database awake during holidays |
 
 Until `config.js` has the database details, the website runs in **demo mode** with example students and data that stays in your browser only.
@@ -113,7 +117,7 @@ miro-exercises/
 
 The website reads the score your exercises already show, such as "Score: 12 / 18", "12 / 27 correct" or "All 15 correct", and collects what the student chose or typed. This works because your exercises and the website live on the same address (`dashaenglish.com`; exercises in any repository of the Dasha-English-Teacher account are served there too, for example `dashaenglish.com/miro-exercises/...`). Keep your exercises in a repository of the Dasha-English-Teacher account and they will work.
 
-For new exercises, add the sentence from `exercise-kit/AI-PROMPT.md` to your request to the AI. The exercise then reports its score directly, which is the most reliable way.
+New exercises follow `exercise-kit/CHATGPT-INSTRUCTIONS.md`: they load the website's theme and `report.js`, and report their score and answers directly, which is the most reliable way.
 
 ## Good to know
 
@@ -121,4 +125,5 @@ For new exercises, add the sentence from `exercise-kit/AI-PROMPT.md` to your req
 - **Security:** the publishable key in `config.js` is meant to be public. The database rules (row-level security) make sure each student sees only their own data and balance, and only the teacher can change programs, prices, payments, settings and feedback. Secret keys (like the Resend key) live only in Supabase Vault, never in this repository.
 - **Your data:** in Supabase, *Table Editor* shows all tables like a spreadsheet, and every table can be exported to CSV.
 - **Emails to students** (each can be switched off on *Website → Emails to students*): lesson reminders, a moved or cancelled lesson, your feedback on an exercise, a new program, payment receipts, a warning when the balance is less than one lesson, a welcome email when you approve an account, and invitations. Receipts for every lesson held are off by default. Students can turn all emails off in their profile. *Website → Email sending* shows whether sending works and lists the latest emails.
-- **"Forgot password" emails** come from Supabase's own mail service, which only delivers to your Supabase team. To make them reach students, use Resend for them too: Supabase → *Authentication → Emails → SMTP Settings*, host `smtp.resend.com`, port `465`, user `resend`, password: a Resend API key, sender `lessons@dashaenglish.com`.
+- **"Forgot password" emails** go through Resend: Supabase → *Authentication → Emails → SMTP Settings*, host `smtp.resend.com`, port `465`, user `resend`, password: a Resend API key, sender `lessons@dashaenglish.com`.
+- **Trying things safely:** add `?demo` to the address (`https://dashaenglish.com/?demo`) to use the website with sample data that stays in your browser. Real data is not touched.

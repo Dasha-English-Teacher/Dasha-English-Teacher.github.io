@@ -947,8 +947,15 @@ function emailPanel(st, emails) {
 
 export function siteSetupView() {
   const st = S.settings;
-  const script = `<script src="${siteUrl().replace(/index\.html$/, '')}assets/report.js"></script>`;
-  const prompt = `When you create an interactive exercise for me, add this line just before </body>:\n${script}\nWhen the student presses the main "Check answers" button, call reportResult(correctCount, totalCount). If there is a "Show answers" button, call reportAnswerKeyShown() when it is pressed. Also show the score on the page as "Score: X / Y".`;
+  const base = siteUrl().replace(/index\.html$/, '');
+  const rulesUrl = 'https://github.com/Dasha-English-Teacher/Dasha-English-Teacher.github.io/blob/main/exercise-kit/CHATGPT-INSTRUCTIONS.md';
+  const prompt = `Make the exercise as one HTML file for my website. In <head> add:
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Lexend:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="${base}assets/theme.css">
+<link rel="stylesheet" href="${base}assets/exercise.css">
+and build it from those classes (ex, card, q, btn, btn-primary, choice, chip, slot, is-right, is-wrong). Just before </body> add:
+<script src="${base}assets/report.js"></script>
+When the student presses "Check answers", show "Score: X / Y" in <p id="score" class="score"> and call reportResult(correctCount, totalCount, answers). If there is a "Show answers" button, call reportAnswerKeyShown(). Drag and drop must also work by tapping. No alert() and no 100vh.`;
   let status = null;
   let emails = [];
   const paintEmail = () => { const box = document.getElementById('email-panel'); if (box) box.innerHTML = emailPanel(status, emails).toString(); };
@@ -1014,10 +1021,10 @@ export function siteSetupView() {
       </form>
       <section class="card-plain"><h2 class="section-title">Email sending</h2>
         <div id="email-panel">${emailPanel(null, [])}</div></section>
-      <section class="card-plain"><h2 class="section-title">Make new exercises send their score</h2>
-        <p>Your current exercises already work: the website reads the score they show. For new exercises, add this sentence to your request to the AI:</p>
+      <section class="card-plain"><h2 class="section-title">Exercises made with AI</h2>
+        <p>The full rules for new exercises (the website's look, the score and the answers) are in <a href="${rulesUrl}" target="_blank" rel="noopener">exercise-kit/CHATGPT-INSTRUCTIONS.md</a>. Your ChatGPT project uses them. With another AI, give it that file, or add this short version to your request. Older exercises keep working as they are.</p>
         <pre class="code">${prompt}</pre>
-        <div class="row-end"><button class="btn" data-on="copy" data-text="${prompt}">${icon('copy')} Copy the sentence</button></div>
+        <div class="row-end"><button class="btn" data-on="copy" data-text="${prompt}">${icon('copy')} Copy the short version</button></div>
       </section>`,
     mount() { loadEmail(); },
     submit: {

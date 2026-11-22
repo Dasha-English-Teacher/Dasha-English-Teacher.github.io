@@ -1,0 +1,52 @@
+/* The theme: colors, fonts and sizes for the whole website AND for every new exercise.
+   Change a value here and it changes everywhere that uses it:
+     - the website (styles.css loads this file first),
+     - exercises that load https://dashaenglish.com/assets/theme.css (see exercise-kit/).
+   Keep the names. Other files refer to them as var(--name).
+
+   Look: an exercise book. Ink-blue text on cool paper, a red margin line,
+   yellow highlighter, the teacher's comments in red handwriting. */
+
+:root {
+  /* paper and ink */
+  --paper: #f3f6fb;        /* page background */
+  --surface: #ffffff;      /* cards and panels */
+  --ink: #16243f;          /* main text */
+  --ink-2: #44546f;        /* secondary text */
+  --ink-3: #6e7d96;        /* quiet text, hints */
+  --rule: #dbe3ef;         /* thin lines and borders */
+  --rule-strong: #b8c6db;  /* borders of inputs and secondary buttons */
+
+  /* accents */
+  --margin: #d94a61;       /* the red margin line, the teacher's pen, wrong answers */
+  --margin-soft: #fbe5e9;
+  --hl: #ffe14d;           /* highlighter */
+  --hl-soft: #fff4b0;
+  --action: #1f4fd1;       /* buttons and links */
+  --action-dark: #163ca3;
+  --action-soft: #e8eefc;  /* a chosen option */
+  --ok: #1a7f52;           /* right answers, done */
+  --ok-soft: #e2f3ea;
+  --warn: #9a5800;
+  --warn-soft: #fff0d6;
+
+  /* fonts (loaded from Google Fonts in index.html and in each exercise) */
+  --font: 'Lexend', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --hand: 'Caveat', 'Segoe Print', 'Bradley Hand', cursive;
+
+  /* type sizes */
+  --fs-xs: 0.8125rem;   /* 13 */
+  --fs-sm: 0.875rem;    /* 14 */
+  --fs-md: 1rem;        /* 16 */
+  --fs-lg: 1.25rem;     /* 20 */
+  --fs-xl: 1.5625rem;   /* 25 */
+  --fs-2xl: 1.953rem;   /* 31 */
+  --fs-3xl: 2.441rem;   /* 39 */
+
+  /* shapes */
+  --side: 248px;        /* width of the website's side menu */
+  --bar: 58px;          /* height of the lesson page's top bar */
+  --r-ctl: 8px;         /* corners of buttons and inputs */
+  --r-panel: 14px;      /* corners of cards */
+  --shadow-pop: 0 18px 50px -12px rgba(22, 36, 63, 0.35);
+}

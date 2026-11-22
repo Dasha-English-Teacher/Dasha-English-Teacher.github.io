@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phrasal verbs with get</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Lexend:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://dashaenglish.com/assets/theme.css">
+<link rel="stylesheet" href="https://dashaenglish.com/assets/exercise.css">
+</head>
+<body>
+<main class="ex">
+  <h1>Phrasal verbs with <em>get</em></h1>
+  <p class="ex-lead">Tap a phrase, then tap a gap (or drag the phrase into the gap). Then press Check answers.</p>
+  <div class="bank" id="bank" aria-label="Phrases"></div>
+  <div class="card" id="items"></div>
+  <div class="ex-actions">
+    <button class="btn btn-primary" id="check">Check answers</button>
+    <button class="btn" id="show">Show answers</button>
+    <button class="btn" id="again">Try again</button>
+  </div>
+  <p id="score" class="score" aria-live="polite"></p>
+</main>
+
+<script>
+  const items = [
+    { before: 'I need to ', after: ' early tomorrow for my flight.', answer: 'get up' },
+    { before: 'It took her months to ', after: ' the flu.', answer: 'get over' },
+    { before: 'How do you ', after: ' with your new colleagues?', answer: 'get on' },
+    { before: 'We should ', after: ' and talk about the project.', answer: 'get together' },
+  ];
+  const words = ['get together', 'get up', 'get on', 'get over'];
+  const $ = (id) => document.getElementById(id);
+  let picked = null; // the phrase the student tapped
+
+  function chipFor(word) { return document.querySelector(`.chip[data-word="${word}"]`); }
+  function setSlot(slot, word) {
+    const old = slot.dataset.word;
+    if (old) chipFor(old).classList.remove('is-used');
+    slot.dataset.word = word || '';
+    slot.textContent = word || ' ';
+    slot.classList.toggle('is-filled', !!word);
+    slot.classList.remove('is-right', 'is-wrong');
+    if (word) {
+      document.querySelectorAll('.slot').forEach((s) => { if (s !== slot && s.dataset.word === word) setSlot(s, ''); });
+      chipFor(word).classList.add('is-used');
+    }
+  }
+  function pick(chip) {
+    document.querySelectorAll('.chip').forEach((c) => c.classList.remove('is-selected'));
+    picked = chip && picked !== chip.dataset.word ? chip.dataset.word : null;
+    if (picked) chip.classList.add('is-selected');
+  }
+
+  words.forEach((w) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = w; b.dataset.word = w; b.draggable = true;
+    b.addEventListener('click', () => pick(b));
+    b.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', w); });
+    $('bank').append(b);
+  });
+
+  items.forEach((it, i) => {
+    const div = document.createElement('div');
+    div.className = 'q';
+    div.innerHTML = `<span class="q-num">${i + 1}.</span> ${it.before}<button type="button" class="slot" id="g${i}" aria-label="Gap ${i + 1}"> </button>${it.after}<span class="mark" id="r${i}"></span>`;
+    $('items').append(div);
+    const slot = $('g' + i);
+    slot.addEventListener('click', () => {
+      if (picked) { setSlot(slot, picked); pick(null); } else if (slot.dataset.word) setSlot(slot, '');
+    });
+    slot.addEventListener('dragover', (e) => { e.preventDefault(); slot.classList.add('is-target'); });
+    slot.addEventListener('dragleave', () => slot.classList.remove('is-target'));
+    slot.addEventListener('drop', (e) => { e.preventDefault(); slot.classList.remove('is-target'); setSlot(slot, e.dataTransfer.getData('text/plain')); pick(null); });
+  });
+
+  $('check').addEventListener('click', () => {
+    let correct = 0;
+    const answers = items.map((it, i) => {
+      const got = $('g' + i).dataset.word || '';
+      const ok = got === it.answer;
+      if (ok) correct++;
+      $('g' + i).classList.toggle('is-right', ok);
+      $('g' + i).classList.toggle('is-wrong', !ok);
+      $('r' + i).textContent = ok ? '✓' : '✗';
+      $('r' + i).className = 'mark ' + (ok ? 'is-right' : 'is-wrong');
+      return { q: `${i + 1}. ${it.before}___${it.after}`, a: got, ok };
+    });
+    $('score').textContent = `Score: ${correct} / ${items.length}`;
+    if (window.reportResult) reportResult(correct, items.length, answers);
+  });
+
+  $('show').addEventListener('click', () => {
+    if (window.reportAnswerKeyShown) reportAnswerKeyShown();
+    items.forEach((it, i) => setSlot($('g' + i), it.answer));
+  });
+
+  $('again').addEventListener('click', () => {
+    items.forEach((it, i) => { setSlot($('g' + i), ''); $('r' + i).textContent = ''; });
+    pick(null);
+    $('score').textContent = '';
+  });
+</script>
+<script src="https://dashaenglish.com/assets/report.js"></script>
+</body>
+</html>
