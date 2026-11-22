@@ -1,18 +1,12 @@
-# Make new exercises send their score
+# Instructions for the AI that makes exercises
 
-Your current exercises already work with the website: it reads the score they show on the page.
-For new exercises, add this paragraph to your request when you ask an AI to create one:
+`CHATGPT-INSTRUCTIONS.md` is the full instruction for ChatGPT (or any other AI).
+Paste it into a ChatGPT Project's instructions (or a Custom GPT), so every new exercise follows it.
 
-```text
-Add this line just before </body>:
-<script src="https://dasha-english-teacher.github.io/assets/report.js"></script>
-When the student presses the main "Check answers" button, call reportResult(correctCount, totalCount).
-If you can, pass the answers as a third argument: an array of objects like
-{ q: "question text", a: "student's answer", ok: true or false }.
-If there is a "Show answers" button, call reportAnswerKeyShown() when it is pressed.
-Also show the score on the page as "Score: X / Y".
-```
+It makes sure new exercises:
+- report the score and the answers to the website (`report.js`, "Score: X / Y");
+- fit inside the lesson page and work on phones;
+- look like the website (Lexend font, the same colors and buttons).
 
-That's all. The exercise still works on its own (for example, when you open the file directly); the report functions simply do nothing there.
-
-See `example-exercise.html` in this folder for a small working example.
+`example-exercise.html` is a small exercise that follows every rule.
+Older exercises keep working: the website reads the score they show on the page.

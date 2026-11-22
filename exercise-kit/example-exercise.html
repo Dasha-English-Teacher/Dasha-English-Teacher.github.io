@@ -3,25 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Example: contrast linkers</title>
+<title>Contrast linkers</title>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #1c2a44; line-height: 1.6; }
-  .q { padding: 12px 0; border-bottom: 1px solid #e3e8f0; }
-  select { font: inherit; padding: 4px 8px; }
-  .ok { color: #1a7f52; } .no { color: #c23a52; }
-  button { font: inherit; padding: 10px 16px; margin-right: 8px; cursor: pointer; }
-  #score { font-weight: 600; margin-top: 16px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f3f6fb; color: #16243f; font: 16px/1.55 'Lexend', system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 20px; }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 4px; }
+  .lead { color: #44546f; margin: 0 0 16px; }
+  .card { background: #fff; border: 1px solid #dbe3ef; border-radius: 14px; padding: 6px 18px; }
+  .q { padding: 14px 0; border-bottom: 1px solid #dbe3ef; }
+  .q:last-child { border-bottom: 0; }
+  select { font: inherit; min-height: 40px; padding: 4px 8px; border: 1px solid #b8c6db; border-radius: 8px; background: #fff; color: inherit; }
+  select.ok { border-color: #1a7f52; background: #e2f3ea; }
+  select.no { border-color: #d94a61; background: #fbe5e9; }
+  .mark { font-weight: 600; margin-left: 6px; }
+  .mark.ok { color: #1a7f52; } .mark.no { color: #d94a61; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+  button { font: inherit; font-weight: 500; min-height: 42px; padding: 8px 18px; border-radius: 8px; cursor: pointer; border: 1px solid #b8c6db; background: #fff; color: #16243f; }
+  button.primary { background: #1f4fd1; border-color: #1f4fd1; color: #fff; }
+  button.primary:hover { background: #163ca3; }
+  :focus-visible { outline: 2px solid #1f4fd1; outline-offset: 2px; }
+  #score { font-weight: 600; font-size: 1.1rem; }
+  @media (max-width: 480px) { main { padding: 12px; } .card { padding: 4px 12px; } }
 </style>
 </head>
 <body>
-<h1>Contrast linkers</h1>
-<p>Choose the best word for each sentence, then press <strong>Check answers</strong>.</p>
-<div id="items"></div>
-<p><button id="check">Check answers</button><button id="show">Show answers</button></p>
-<p id="score"></p>
+<main>
+  <h1>Contrast linkers</h1>
+  <p class="lead">Choose the best word for each sentence, then press Check answers.</p>
+  <div class="card" id="items"></div>
+  <div class="actions">
+    <button class="primary" id="check">Check answers</button>
+    <button id="show">Show answers</button>
+    <button id="again">Try again</button>
+  </div>
+  <p id="score" aria-live="polite"></p>
+</main>
 
-<!-- 1. This line lets the exercise report its score to the website. -->
-<script src="https://dasha-english-teacher.github.io/assets/report.js"></script>
 <script>
   const items = [
     { before: '', after: ' the rain, we went for a walk.', options: ['Despite', 'Although', 'Whereas'], answer: 'Despite' },
@@ -32,31 +51,40 @@
   items.forEach((it, i) => {
     const div = document.createElement('div');
     div.className = 'q';
-    div.innerHTML = `${i + 1}. ${it.before}<select id="s${i}"><option value="">Choose…</option>${it.options.map((o) => `<option>${o}</option>`).join('')}</select>${it.after} <span id="r${i}"></span>`;
+    div.innerHTML = `<label for="s${i}">${i + 1}. ${it.before}</label><select id="s${i}"><option value="">Choose…</option>${it.options.map((o) => `<option>${o}</option>`).join('')}</select>${it.after}<span class="mark" id="r${i}"></span>`;
     box.append(div);
   });
 
   document.getElementById('check').addEventListener('click', () => {
     let correct = 0;
     const answers = items.map((it, i) => {
-      const value = document.getElementById('s' + i).value;
-      const ok = value === it.answer;
+      const sel = document.getElementById('s' + i);
+      const ok = sel.value === it.answer;
       if (ok) correct++;
+      sel.className = ok ? 'ok' : 'no';
       const mark = document.getElementById('r' + i);
       mark.textContent = ok ? '✓' : '✗';
-      mark.className = ok ? 'ok' : 'no';
-      return { q: `${it.before}___${it.after}`, a: value, ok };
+      mark.className = 'mark ' + (ok ? 'ok' : 'no');
+      return { q: `${i + 1}. ${it.before}___${it.after}`, a: sel.value, ok };
     });
     document.getElementById('score').textContent = `Score: ${correct} / ${items.length}`;
-    // 2. Tell the website the score (and the answers).
     if (window.reportResult) reportResult(correct, items.length, answers);
   });
 
   document.getElementById('show').addEventListener('click', () => {
-    // 3. Tell the website the student opened the answer key.
     if (window.reportAnswerKeyShown) reportAnswerKeyShown();
     items.forEach((it, i) => { document.getElementById('s' + i).value = it.answer; });
   });
+
+  document.getElementById('again').addEventListener('click', () => {
+    items.forEach((it, i) => {
+      document.getElementById('s' + i).value = '';
+      document.getElementById('s' + i).className = '';
+      document.getElementById('r' + i).textContent = '';
+    });
+    document.getElementById('score').textContent = '';
+  });
 </script>
+<script src="https://dashaenglish.com/assets/report.js"></script>
 </body>
 </html>
