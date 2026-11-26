@@ -3,7 +3,8 @@
 // the middle. All sections of the lesson are listed on the right, with
 // "Finish lesson" at the end. Exercises save by themselves while the student works.
 import { html, icon, toast, openModal, duration, nl2br, plural } from './ui.js';
-import { S, go, isTeacher, findLesson, findMaterial, progressIndex, lessonDone, courseStats, scoreText, scoreClass, teacherName, notifyTeacher, siteUrl, siteAddress, youtubeId, normUrl } from './core.js';
+import { S, go, isTeacher, findLesson, findMaterial, progressIndex, sectionDone, lessonDone, courseStats, scoreText, scoreClass, teacherName, notifyTeacher, siteUrl, siteAddress, youtubeId, normUrl } from './core.js';
+import { bindStoryControls, storyDestination, STORY_INSTRUCTION, STORY_PENDING } from './story.js';
 import { createTracker } from './tracker.js';
 
 export const lessonRoom = ({ id }) => room({ lessonId: id });
@@ -26,13 +27,19 @@ function notFound(teacher) {
 
 async function room({ lessonId, materialId, finish = false }) {
   const teacher = isTeacher();
+  const studentId = S.me.id;
+  const sameAccount = () => S.api.me?.id === studentId;
   const [tree, attempts] = await Promise.all([S.api.tree(), teacher ? [] : S.api.listAttempts({ student_id: S.me.id })]);
   const found = materialId ? findMaterial(tree, materialId) : findLesson(tree, lessonId);
   if (!found) return notFound(teacher);
-  const { course, lesson } = found;
+  const { lesson } = found;
+  let { course } = found;
   const mats = lesson.materials;
   const lessonNo = course.lessons.indexOf(lesson) + 1;
-  const nextLesson = course.lessons[lessonNo] || null;
+  const ending = lesson.materials.find((m) => m.story);
+  const nextLesson = () => !teacher && ending
+    ? storyDestination(course, ending)
+    : course.lessons[course.lessons.findIndex((l) => l.id === lesson.id) + 1];
   let idx = progressIndex(attempts);
 
   // Which section to show: the one asked for, or the first one not done yet.
@@ -40,7 +47,7 @@ async function room({ lessonId, materialId, finish = false }) {
   let cur = -1;
   if (materialId) cur = found.index;
   else if (!finish && mats.length) {
-    cur = teacher || lessonDone(lesson, idx) ? 0 : Math.max(0, mats.findIndex((m) => !idx.get(m.id)?.done));
+    cur = teacher || lessonDone(lesson, idx) ? 0 : Math.max(0, mats.findIndex((m) => !sectionDone(m, idx)));
     history.replaceState(null, '', `#play-${mats[cur].id}`);
   }
   const mat = cur >= 0 ? mats[cur] : null;
@@ -55,6 +62,8 @@ async function room({ lessonId, materialId, finish = false }) {
   // ---------- right column: the list of sections ----------
   const stateOf = (m) => {
     const p = teacher ? null : idx.get(m.id);
+    if (m.story?.only) return m.decision ? { cls: 'is-done', note: 'Choice saved' } : { cls: '', note: 'Choice pending' };
+    if (p?.done && m.story && !m.decision) return { cls: 'is-started', note: 'Choice pending' };
     if (p?.done) return { cls: 'is-done', note: m.kind === 'exercise' && p.completed.score != null ? scoreText(p.completed) : '', a: p.completed };
     if (p) return { cls: 'is-started', note: 'started', a: p.last };
     return { cls: '', note: '' };
@@ -103,7 +112,7 @@ async function room({ lessonId, materialId, finish = false }) {
   let lastSaved = '';
 
   const ensureAttempt = () => {
-    if (teacher) return Promise.resolve(null);
+    if (teacher || !sameAccount()) return Promise.resolve(null);
     if (attempt) return Promise.resolve(attempt);
     if (!creating) {
       creating = S.api.createAttempt({ material_id: mat.id, material_title: mat.title, status: 'in_progress' })
@@ -117,8 +126,8 @@ async function room({ lessonId, materialId, finish = false }) {
     revealed: snap.revealed, answers: snap.answers, seconds: snap.seconds,
   });
   async function save(snap = tracker && tracker.snapshot(), extra = {}) {
-    if (teacher || !snap || !snap.interacted) return attempt;
-    await ensureAttempt();
+    if (teacher || !sameAccount() || !snap || !snap.interacted) return attempt;
+    if (!(await ensureAttempt()) || !sameAccount()) return null;
     const body = { ...payload(snap), ...extra };
     const sig = JSON.stringify(body);
     if (sig === lastSaved) return attempt;
@@ -200,7 +209,7 @@ async function room({ lessonId, materialId, finish = false }) {
     if (!mat) return html`<div class="sec-empty"><h1>No sections yet</h1><p class="muted">${teacher ? html`Add exercises and other sections to this lesson in the <a href="#edit-program-${course.id}">program editor</a>.` : `${teacherName()} has not added anything to this lesson yet.`}</p></div>`;
     const head = html`<header class="sec-head">
       <div class="sec-title"><span class="sec-kicker">${icon(KIND_ICON[mat.kind] || 'note')} ${KIND_WORD[mat.kind] || 'Section'}</span><h1>${mat.title}</h1></div>
-      ${mat.kind === 'exercise' ? html`<div class="sec-tools">
+      ${mat.kind === 'exercise' && !mat.story?.only ? html`<div class="sec-tools">
         ${teacher ? '' : html`<span class="chip ${chipState({}).cls}" id="play-score">${chipState({}).text}</span>
           <span class="player-time" title="Time on this exercise">${icon('clock')}<span id="play-time">0 s</span></span>`}
         <a class="icon-btn hide-sm" href="${siteAddress(mat.url)}" target="_blank" rel="noopener" aria-label="Open in a new tab" title="Open in a new tab">${icon('external')}</a>
@@ -221,21 +230,34 @@ async function room({ lessonId, materialId, finish = false }) {
       body = html`<div class="sec-link-box"><p class="muted">This section opens on another website (${hostOf(mat.url)}).</p>
         <p><a class="btn btn-primary" href="${mat.url}" target="_blank" rel="noopener" data-on="open-link">${icon('external')} Open the link</a></p></div>`;
     }
-    return html`${head}<div class="sec-body sec-${mat.kind}">${body}</div>${pager()}`;
+    const story = mat.story && !mat.story.embedded ? html`
+      <div data-story-decision class="notice" id="room-story">
+        <p>${STORY_INSTRUCTION}</p>
+        <fieldset data-story-options><legend>Choose what happens next</legend>
+          ${Object.entries(mat.story.options).map(([key, option]) => html`
+            <label class="check"><input type="radio" name="story-choice" data-story-option="${key}"> ${option.label}</label>`)}
+        </fieldset>
+        <p><button class="btn btn-primary" type="button" data-story-confirm disabled>Continue my story</button></p>
+        <p data-story-status role="status"></p>
+      </div>` : '';
+    return html`${head}<div class="sec-body sec-${mat.kind}">${body}${story}</div>${pager()}`;
   };
 
   // ---------- the middle: finishing the lesson ----------
   const exerciseLine = (m) => {
+    if (m.story?.only) return m.decision ? 'Choice saved' : 'Choice pending';
     const p = idx.get(m.id);
     if (!p) return 'not opened';
     if (!p.done) return 'started, not finished';
+    if (m.story && !m.decision) return 'Choice pending';
     return m.kind === 'exercise' && p.completed.score != null ? scoreText(p.completed) : 'done';
   };
   const finishHtml = (sent = false) => {
-    const pending = mats.filter(openAttempt);
-    const unopened = teacher ? [] : mats.filter((m) => !idx.get(m.id));
+    const next = nextLesson();
+    const pending = mats.filter((m) => !m.story?.only && openAttempt(m));
+    const unopened = teacher ? [] : mats.filter((m) => !m.story?.only && !idx.get(m.id));
     const complete = !teacher && lessonDone(lesson, idx);
-    const scored = mats.map((m) => idx.get(m.id)?.completed).filter((a) => a && a.score != null && a.max_score);
+    const scored = mats.filter((m) => !m.story?.only).map((m) => idx.get(m.id)?.completed).filter((a) => a && a.score != null && a.max_score);
     const total = scored.reduce((s, a) => s + a.score, 0);
     const max = scored.reduce((s, a) => s + a.max_score, 0);
     return html`<div class="finish">
@@ -244,15 +266,16 @@ async function room({ lessonId, materialId, finish = false }) {
       ${sent ? html`<p class="hand hand-lg">Sent to ${teacherName()}!</p>` : ''}
       ${max ? html`<p class="finish-total">Exercises: <strong>${total} / ${max}</strong></p>` : ''}
       <ol class="finish-list">${mats.map((m) => {
-        const p = teacher ? null : idx.get(m.id);
-        return html`<li class="${p?.done ? 'is-done' : p ? 'is-started' : ''}"><a href="#play-${m.id}">${m.title}</a><span class="${p?.completed?.score != null ? `score ${scoreClass(p.completed)}` : 'muted small'}">${teacher ? '' : exerciseLine(m)}</span></li>`;
+        const p = teacher || m.story?.only ? null : idx.get(m.id);
+        return html`<li class="${!teacher && sectionDone(m, idx) ? 'is-done' : p ? 'is-started' : ''}"><a href="#play-${m.id}">${m.title}</a><span class="${p?.completed?.score != null ? `score ${scoreClass(p.completed)}` : 'muted small'}">${teacher ? '' : exerciseLine(m)}</span></li>`;
       })}</ol>
       ${teacher ? html`<p class="notice small">Students press this button at the end of a lesson. Their unfinished exercises are saved as they are, and you get one email with all the results.</p>` : ''}
       ${!teacher && !sent && unopened.length ? html`<p class="notice notice-warn small">Not opened yet: ${unopened.map((m) => m.title).join(', ')}. You can go back to ${unopened.length === 1 ? 'it' : 'them'}, or finish now.</p>` : ''}
       ${!teacher && !sent && pending.length ? html`<p class="notice small">Not finished yet: ${pending.map((m) => m.title).join(', ')}. ${pending.length === 1 ? 'It is' : 'They are'} sent as ${pending.length === 1 ? 'it is' : 'they are'}.</p>` : ''}
+      ${!teacher && ending && !next ? html`<p class="notice">${ending.decision ? STORY_PENDING : html`<a href="#play-${ending.id}">Choose what happens next to continue your story.</a>`}</p>` : ''}
       <div class="row-end finish-actions">
         <a class="btn" href="#program-${course.id}">All lessons</a>
-        ${nextLesson && (teacher || sent || complete) ? html`<a class="btn ${sent || teacher ? 'btn-primary' : ''}" href="#lesson-${nextLesson.id}">Next lesson: ${nextLesson.title} ${icon('next')}</a>` : ''}
+        ${next && (teacher || sent || complete || ending?.decision) ? html`<a class="btn ${sent || teacher ? 'btn-primary' : ''}" href="#lesson-${next.id}">Next lesson: ${next.title} ${icon('next')}</a>` : ''}
         ${!teacher && !sent ? html`<button class="btn btn-primary" data-on="finish-lesson">${icon('flag')} ${complete ? `Send results to ${teacherName()}` : `Finish and send to ${teacherName()}`}</button>` : ''}
       </div>
     </div>`;
@@ -261,7 +284,7 @@ async function room({ lessonId, materialId, finish = false }) {
   async function finishLesson() {
     const now = new Date().toISOString();
     // Exercises started (or started again) but not finished are sent as they are.
-    for (const a of mats.map(openAttempt).filter(Boolean)) await S.api.updateAttempt(a.id, { status: 'completed', finished_at: now });
+    for (const a of mats.filter((m) => !m.story?.only).map(openAttempt).filter(Boolean)) await S.api.updateAttempt(a.id, { status: 'completed', finished_at: now });
     idx = progressIndex(await S.api.listAttempts({ student_id: S.me.id }));
     if (S.settings.notify_on_finish !== false) {
       const lines = mats.map((m, k) => `${k + 1}. ${m.title}: ${exerciseLine(m)}`).join('\n');
@@ -277,6 +300,31 @@ async function room({ lessonId, materialId, finish = false }) {
     if (box) box.innerHTML = finishHtml(true).toString();
     paintSide();
     paintProgress();
+  }
+
+  let cleanStory;
+  let mounted = false;
+  async function confirmStory(choice, predictions) {
+    if (!mounted || !sameAccount()) throw new Error('Open the section again to save your choice.');
+    const decision = await S.api.confirmStoryDecision({ course_id: course.id, material_id: mat.id, choice, predictions });
+    const tree = await S.api.tree();
+    if (mounted && sameAccount()) {
+      course = tree.find((c) => c.id === course.id) || course;
+      mat.decision = decision;
+      paintSide();
+      paintProgress();
+    }
+    return decision;
+  }
+
+  function bindStory(container) {
+    if (!container || !mat.story) return;
+    cleanStory?.();
+    cleanStory = bindStoryControls(container, {
+      material: mat, teacher, confirm: confirmStory,
+      navigate: (id) => go('lesson-' + id),
+      destination: (decision) => storyDestination(course, mat, decision),
+    });
   }
 
   // ---------- page ----------
@@ -313,11 +361,61 @@ async function room({ lessonId, materialId, finish = false }) {
       },
     },
     mount() {
+      mounted = true;
       if (!mat) return;
+      bindStory(document.getElementById('room-story'));
       if (mat.kind === 'exercise') {
         const frame = document.getElementById('exercise-frame');
+        const address = siteAddress(mat.url);
+        const currentDocument = () => {
+          try {
+            const href = frame.contentWindow.location.href;
+            return normUrl(href) === normUrl(address) ? frame.contentDocument : null;
+          } catch { return null; }
+        };
+        const branching = Object.keys(course.story_rules || {}).length > 0;
+        const otherSection = (url) => (branching ? course.lessons.flatMap((l) => l.materials) : mats)
+          .find((m) => m.id !== mat.id && m.kind === 'exercise' && normUrl(siteAddress(m.url)) === normUrl(url));
+        const acceptsDocument = () => {
+          // Cross-origin legacy exercise reporting remains supported.
+          if (new URL(address, location.href).origin !== location.origin) return true;
+          return !!currentDocument();
+        };
+
+        function attachFrame() {
+          const doc = currentDocument();
+          if (!doc) {
+            try {
+              const href = frame.contentWindow.location.href;
+              if (href === 'about:blank') return;
+              const other = otherSection(href);
+              if (other) { go('play-' + other.id); return; }
+            } catch { /* cross-origin section */ }
+            if (branching && new URL(address, location.href).origin === location.origin) frame.src = address;
+            return;
+          }
+          if (mat.story?.embedded) bindStory(doc.querySelector('[data-story-decision]'));
+          doc.addEventListener('click', (event) => {
+            const anchor = event.target.closest('a[href]');
+            if (!anchor || event.defaultPrevented || anchor.hasAttribute('download')) return;
+            const target = new URL(anchor.href, doc.URL);
+            if (normUrl(target.href) === normUrl(address)) return;
+            const other = otherSection(target.href);
+            if (other) {
+              event.preventDefault();
+              go('play-' + other.id);
+            } else if (branching && target.pathname.startsWith('/miro-exercises/') && /\.html?$/i.test(target.pathname)) {
+              event.preventDefault();
+            }
+          }, true);
+        }
+
+        frame.addEventListener('load', attachFrame);
+        if (currentDocument()?.readyState === 'complete') attachFrame();
+        if (mat.story?.only) return;
         tracker = createTracker(frame, {
           studentName: teacher ? '' : (S.me.full_name || ''),
+          acceptsDocument,
           onChange(reason, snap) {
             paintBar(snap);
             if (teacher) return;
@@ -327,21 +425,14 @@ async function room({ lessonId, materialId, finish = false }) {
           },
         });
         timerTick = setInterval(() => paintBar(tracker.peek()), 1000);
-        // An exercise can link to the next file. If that file is another section
-        // of this lesson, show it as that section (so its results are saved there).
-        frame.addEventListener('load', () => {
-          let href = '';
-          try { href = frame.contentWindow.location.href; } catch { return; }
-          if (!href || href === 'about:blank' || normUrl(href) === normUrl(siteAddress(mat.url))) return;
-          const other = mats.find((m) => m.id !== mat.id && m.url && normUrl(siteAddress(m.url)) === normUrl(href));
-          if (other) go(`play-${other.id}`);
-        });
       } else if (mat.kind !== 'link' && !teacher && !idx.get(mat.id)?.done) {
         // Reading and videos count as done once opened.
         S.api.createAttempt({ material_id: mat.id, material_title: mat.title, status: 'completed', finished_at: new Date().toISOString() }).then(markDone).catch(() => {});
       }
     },
     unmount() {
+      mounted = false;
+      cleanStory?.();
       clearInterval(timerTick);
       clearTimeout(saveTimer);
       if (!tracker) return;

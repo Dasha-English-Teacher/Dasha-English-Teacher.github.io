@@ -1,3 +1,4 @@
+import { storyEditor } from './story-editor.js';
 // Teacher pages: today, students, programs, library, results, calendar, requests, website settings.
 import { html, raw, icon, toast, openModal, ask, copyText, nl2br, fmtDate, fmtDateLong, fmtTime, fmtDateTime, fmtDay, timeAgo, duration, plural, initials, sameDay, startOfWeek, addDays, startOfDay, dateInput, timeInput, setTimeFormat, esc } from './ui.js';
 import { S, go, refresh, progressIndex, courseStats, scoreText, scoreClass, gcalUrl, loadLibrary, siteUrl, siteAddress, teacherName, money, priceOf, hasOwnPrice, ledgerFor, balanceLevel, invalidateNav, currencySign, needsReview, isExerciseAttempt, normUrl, folderOf, niceTitle, byName } from './core.js';
@@ -510,6 +511,19 @@ export async function editProgramView({ id }) {
   const name = nameOf(profiles);
   const inProgram = enrollments.filter((e) => e.course_id === id).map((e) => e.student_id);
 
+  const rules = course.story_rules || {};
+  const hasRules = Object.keys(rules).length;
+  const decisions = hasRules ? await S.api.listStoryDecisions(id) : [];
+  const branching = storyEditor(course, decisions, name);
+  const lessonReferenced = (lesson) => lesson.materials.some((m) => rules[m.id])
+    || Object.values(rules).some((r) => Object.values(r.options).some((o) => o.lesson === lesson.id));
+  const checkLesson = (lesson) => {
+    if (lessonReferenced(lesson)) throw new Error('Remove this lesson from the story decisions before moving or deleting it.');
+  };
+  const checkMaterial = (material) => {
+    if (rules[material.id]) throw new Error('Remove the story decision before moving or deleting this section.');
+  };
+
   const lessonBlock = (l, i) => html`<li class="ed-lesson">
     <div class="ed-lesson-head">
       <span class="margin-num">${i + 1}</span>
@@ -556,8 +570,10 @@ export async function editProgramView({ id }) {
         <p class="muted small">Each lesson has sections. Students see them listed beside the lesson and go through them one by one.</p>
         ${course.lessons.length ? html`<ol class="ed-lessons">${course.lessons.map(lessonBlock)}</ol>` : html`<p class="muted">No lessons yet. Add the first lesson, then put exercises in it.</p>`}
       </section>
+      ${branching.html}
       <p class="danger-zone"><button class="btn btn-ghost btn-danger-text" data-on="delete">${icon('trash')} Delete this program</button></p>`,
     on: {
+      ...branching.on,
       settings: () => programDialog(course),
       async delete() {
         if (!(await ask(`Delete "${course.title}"?`, { ok: 'Delete program', danger: true, detail: 'All its lessons are deleted too. Student results stay in Results. To keep a lesson, move it to another program first.' }))) return;
@@ -578,9 +594,10 @@ export async function editProgramView({ id }) {
       'lesson-add': () => lessonDialog(course),
       'lesson-folder': () => lessonFromFolderDialog({ course, tree }),
       'lesson-edit': (el) => lessonDialog(course, course.lessons[+el.dataset.i]),
-      'lesson-move': (el) => lessonMoveDialog(tree, course, course.lessons[+el.dataset.i]),
+      'lesson-move': (el) => { const lesson = course.lessons[+el.dataset.i]; checkLesson(lesson); lessonMoveDialog(tree, course, lesson); },
       async 'lesson-del'(el) {
         const l = course.lessons[+el.dataset.i];
+        checkLesson(l);
         if (!(await ask(`Delete lesson "${l.title}"?`, { ok: 'Delete lesson', danger: true, detail: 'Its sections are removed from the program. The files stay on GitHub, and student results stay in Results.' }))) return;
         await S.api.deleteLesson(l.id); refresh();
       },
@@ -588,11 +605,12 @@ export async function editProgramView({ id }) {
       async 'lesson-down'(el) { await reorder(course.lessons, +el.dataset.i, 1, S.api.saveLesson); refresh(); },
       async 'mat-up'(el) { await reorder(course.lessons[+el.dataset.i].materials, +el.dataset.k, -1, S.api.saveMaterial); refresh(); },
       async 'mat-down'(el) { await reorder(course.lessons[+el.dataset.i].materials, +el.dataset.k, 1, S.api.saveMaterial); refresh(); },
-      'mat-move': (el) => { const l = course.lessons[+el.dataset.i]; materialMoveDialog(tree, l, l.materials[+el.dataset.k]); },
+      'mat-move': (el) => { const l = course.lessons[+el.dataset.i]; const mat = l.materials[+el.dataset.k]; checkMaterial(mat); materialMoveDialog(tree, l, mat); },
       'mat-add': (el) => materialDialog(course.lessons[+el.dataset.i]),
       'mat-edit': (el) => { const l = course.lessons[+el.dataset.i]; materialDialog(l, l.materials[+el.dataset.k]); },
       async 'mat-del'(el) {
         const mat = course.lessons[+el.dataset.i].materials[+el.dataset.k];
+        checkMaterial(mat);
         if (!(await ask(`Remove "${mat.title}" from this lesson?`, { ok: 'Remove', danger: true, detail: 'The exercise file stays on GitHub. Student results stay in Results.' }))) return;
         await S.api.deleteMaterial(mat.id); refresh();
       },

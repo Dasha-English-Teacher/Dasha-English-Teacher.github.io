@@ -1,3 +1,5 @@
+import { adventStoryRules, storyPathOpen, withStoryDecisions } from './story.js';
+
 // Data layer. Two interchangeable versions with the same functions:
 //  - live: Supabase (real accounts, data stored online)
 //  - demo: sample data kept in this browser only (used until Supabase is connected)
@@ -45,7 +47,7 @@ export const DEFAULT_SETTINGS = {
 const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
 const FIELDS = {
   profiles: ['full_name', 'role', 'status', 'level', 'phone', 'goals', 'lesson_price', 'email_notifications', 'timezone'],
-  courses: ['title', 'description', 'emoji', 'color', 'level', 'published', 'sort'],
+  courses: ['story_rules', 'title', 'description', 'emoji', 'color', 'level', 'published', 'sort'],
   lessons: ['course_id', 'title', 'description', 'published', 'sort'],
   materials: ['lesson_id', 'kind', 'title', 'url', 'body', 'sort'],
   attempts: ['material_id', 'material_title', 'status', 'score', 'max_score', 'first_score', 'first_max', 'revealed', 'answers', 'seconds', 'finished_at', 'feedback', 'feedback_at', 'feedback_seen', 'reviewed'],
@@ -148,8 +150,20 @@ export async function createLiveApi(cfg) {
 
     async tree() {
       const rows = await run(sb.from('courses').select('*, lessons(*, materials(*))').order('sort'));
-      return sortTree(rows || []);
+      const courses = sortTree(rows || []);
+      if (me?.role === 'teacher' || !courses.some((c) => Object.keys(c.story_rules || {}).length)) return withStoryDecisions(courses, []);
+      const decisions = await run(sb.from('story_decisions').select('*').eq('student_id', me.id));
+      return withStoryDecisions(courses, decisions);
     },
+    listStoryDecisions: (course_id) => run(sb.from('story_decisions').select('*').eq('course_id', course_id).order('confirmed_at')),
+    async confirmStoryDecision({ course_id, material_id, choice, predictions }) {
+      const student_id = me?.id;
+      if (!student_id || me.role === 'teacher') throw new Error('Sign in as a student to save a choice.');
+      const options = { onConflict: 'course_id,student_id,material_id', ignoreDuplicates: true };
+      await run(sb.from('story_decisions').upsert({ course_id, material_id, student_id, choice, predictions }, options));
+      return run(sb.from('story_decisions').select('*').eq('course_id', course_id).eq('student_id', student_id).eq('material_id', material_id).single());
+    },
+    resetStoryDecisions: (course_id, student_id) => run(sb.from('story_decisions').delete().eq('course_id', course_id).eq('student_id', student_id)),
     saveCourse: (o) => save('courses', o),
     deleteCourse: (id) => remove('courses', id),
     saveLesson: (o) => save('lessons', o),
@@ -240,7 +254,7 @@ export async function createLiveApi(cfg) {
 // =====================================================================
 // DEMO (sample data in this browser)
 // =====================================================================
-const DEMO_KEY = 'english-studio-demo-v2';
+const DEMO_KEY = 'english-studio-demo-v3';
 
 export const DEMO_EXERCISES = [
   'Tamila_Part_1_Multiple_Choice.html',
@@ -283,6 +297,7 @@ function demoSeed(base, only) {
       { id: 'h-4', student_id: S1, session_id: 's-p1', lesson_id: null, held_on: at(-4, 18), minutes: 60, price: 6000, title: 'English lesson', note: '', status: 'held', created_at: iso(now - 4 * day) },
       { id: 'h-5', student_id: S2, session_id: null, lesson_id: 'l-impostor', held_on: at(-9, 10, 30), minutes: 45, price: 5000, title: 'Vocabulary lesson', note: '', status: 'held', created_at: iso(now - 9 * day) },
     ],
+    story_decisions: [],
     courses: [
       { id: 'c-grammar', title: 'C1 grammar with Tamila', description: 'Contrast linkers, comparatives and combining ideas in writing.', emoji: '✍️', color: '#1f4fd1', level: 'C1', published: true, sort: 0, created_at: created },
       { id: 'c-burnout', title: 'Burnout and well-being vocabulary', description: 'Words and expressions for talking about stress, impostor syndrome and healthy work habits.', emoji: '🌿', color: '#1e8a5a', level: 'B2–C1', published: true, sort: 1, created_at: created },
@@ -364,6 +379,27 @@ function demoSeed(base, only) {
     db.materials = db.materials.filter((m) => db.lessons.some((l) => l.id === m.lesson_id));
     db.attempts = db.attempts.filter((a) => db.materials.some((m) => m.id === a.material_id));
   }
+  const chapters = [
+    ['Part 3', 'Part 3', ['1_index.html', '2_discuss.html']],
+    ['Part 4 — Boyfriend', 'Part 4/boyfriend option', ['1-boyfriend-listening.html', '2-boyfriend-reading.html']],
+    ['Part 4 — Car', 'Part 4/car option', ['1-car-discussion.html', '2-car-reading.html', '3-car-listening.html']],
+  ];
+  const advent = { id: 'c-advent', title: 'Christmas Advent Calendar', emoji: '🎄', published: true, sort: 2, created_at: created };
+  const lessons = chapters.map(([title, path, files], sort) => ({
+    id: 'l-advent-' + sort, title, course_id: advent.id, published: true, sort, created_at: created,
+    materials: files.map((file, index) => ({
+      id: 'm-advent-' + sort + '-' + index, lesson_id: 'l-advent-' + sort, kind: 'exercise',
+      title: file.replace(/^\d[-_]/, '').replace(/\.html$/, '').replaceAll('-', ' '),
+      url: ex('Christmas advent/' + path + '/' + file), sort: index, created_at: created,
+    })),
+  }));
+  if (!only) {
+    advent.story_rules = adventStoryRules(lessons);
+    db.courses.push(advent);
+    db.lessons.push(...lessons.map(({ materials, ...lesson }) => lesson));
+    db.materials.push(...lessons.flatMap((l) => l.materials));
+    db.enrollments.push(...[S1, S2].map((student_id) => ({ course_id: advent.id, student_id, created_at: created })));
+  }
   return db;
 }
 
@@ -391,6 +427,13 @@ export function createDemoApi(cfg) {
     if (me.role === 'teacher') return true;
     return c.published && me.status === 'active' && db.enrollments.some((e) => e.course_id === c.id && e.student_id === me.id);
   };
+
+  const fullCourse = (c) => ({
+    ...c,
+    lessons: db.lessons.filter((l) => l.course_id === c.id).map((l) => ({
+      ...l, materials: db.materials.filter((m) => m.lesson_id === l.id),
+    })),
+  });
 
   function upsert(list, o, prefix, fields) {
     if (o.id) {
@@ -458,13 +501,37 @@ export function createDemoApi(cfg) {
 
     async tree() {
       const teacher = isTeacher();
-      const courses = db.courses.filter(canSeeCourse).map((c) => ({
-        ...c,
-        lessons: db.lessons.filter((l) => l.course_id === c.id && (teacher || l.published)).map((l) => ({
-          ...l, materials: db.materials.filter((m) => m.lesson_id === l.id),
-        })),
-      }));
-      return sortTree(clone(courses));
+      const decisions = db.story_decisions.filter((d) => d.student_id === meRow()?.id);
+      const courses = db.courses.filter(canSeeCourse).map((c) => {
+        const course = fullCourse(c);
+        if (!teacher) course.lessons = course.lessons.filter((l) => storyPathOpen(course, l, decisions));
+        return course;
+      });
+      return withStoryDecisions(sortTree(clone(courses)), decisions);
+    },
+    async listStoryDecisions(course_id) {
+      need(meRow());
+      return wait(db.story_decisions.filter((d) => d.course_id === course_id && (isTeacher() || d.student_id === meRow().id)));
+    },
+    async confirmStoryDecision({ course_id, material_id, choice, predictions }) {
+      const student_id = meRow()?.id;
+      const base = db.courses.find((c) => c.id === course_id);
+      need(student_id && !isTeacher() && base && canSeeCourse(base));
+      const course = fullCourse(base);
+      const decisions = db.story_decisions.filter((d) => d.student_id === student_id);
+      const source = course.lessons.find((l) => l.materials.some((m) => m.id === material_id));
+      need(storyPathOpen(course, source, decisions) && Object.hasOwn(course.story_rules?.[material_id]?.options || {}, choice));
+      const existing = decisions.find((d) => d.course_id === course_id && d.material_id === material_id);
+      if (existing) return wait(existing);
+      const decision = { course_id, material_id, student_id, choice, predictions: clone(predictions), confirmed_at: nowIso() };
+      db.story_decisions.push(decision);
+      persist();
+      return wait(decision);
+    },
+    async resetStoryDecisions(course_id, student_id) {
+      need(isTeacher());
+      db.story_decisions = db.story_decisions.filter((d) => d.course_id !== course_id || d.student_id !== student_id);
+      persist();
     },
     saveCourse(o) { need(isTeacher()); return upsert(db.courses, o, 'c', FIELDS.courses); },
     async deleteCourse(cid) {
@@ -514,6 +581,11 @@ export function createDemoApi(cfg) {
     async getAttempt(aid) { const me = meRow(); need(me); const a = db.attempts.find((x) => x.id === aid && (isTeacher() || x.student_id === me.id)); return wait(a || null); },
     async createAttempt(o) {
       const me = meRow(); need(me);
+      if (!isTeacher() && o.material_id) {
+        const lesson = db.lessons.find((l) => l.id === db.materials.find((m) => m.id === o.material_id)?.lesson_id);
+        const base = db.courses.find((c) => c.id === lesson?.course_id);
+        need(base && canSeeCourse(base) && storyPathOpen(fullCourse(base), lesson, db.story_decisions.filter((d) => d.student_id === me.id)));
+      }
       const row = { id: id('a'), student_id: me.id, status: 'in_progress', score: null, max_score: null, first_score: null, first_max: null, revealed: false, answers: [], seconds: 0, started_at: nowIso(), finished_at: null, feedback: null, feedback_at: null, feedback_seen: false, reviewed: false, ...pick(o, FIELDS.attempts) };
       if (!isTeacher()) { row.feedback = null; row.reviewed = false; }
       row.updated_at = nowIso();
@@ -618,6 +690,7 @@ export function createDemoApi(cfg) {
     }
   }
   return api;
+
 }
 
 export async function createApi(cfg) {
