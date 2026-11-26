@@ -5,39 +5,52 @@
 import { html, icon, toast, openModal, duration, nl2br, plural } from './ui.js';
 import { S, go, isTeacher, findLesson, findMaterial, progressIndex, sectionDone, lessonDone, courseStats, scoreText, scoreClass, teacherName, notifyTeacher, siteUrl, siteAddress, youtubeId, normUrl } from './core.js';
 import { bindStoryControls, storyDestination, STORY_INSTRUCTION, STORY_PENDING } from './story.js';
+import { confirmPreviewDecision, hasStoryPreview, previewRoute, storyPreviewCourse } from './story-preview.js';
 import { createTracker } from './tracker.js';
 
 export const lessonRoom = ({ id }) => room({ lessonId: id });
 export const playRoom = ({ id }) => room({ materialId: id });
 export const finishRoom = ({ id }) => room({ lessonId: id, finish: true });
 
+export function storyPreviewRoom({ id, name }) {
+  const [previewId, target, extra] = id.split('/');
+  if (!isTeacher() || !previewId || !target || extra !== undefined) return notFound(isTeacher());
+  return room({ previewId, materialId: name === 'preview-play' ? target : undefined,
+    lessonId: target, finish: name === 'preview-finish' });
+}
+
 const KIND_WORD = { exercise: 'Exercise', video: 'Video', link: 'Link', text: 'Reading' };
 const KIND_ICON = { exercise: 'pen', video: 'video', link: 'link', text: 'note' };
 
 function hostOf(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } }
 
-function notFound(teacher) {
+function notFound(teacher, previewId) {
   return {
     title: 'Not available',
     layout: 'full',
     html: html`<div class="room room-empty"><div class="room-card"><h1>This lesson is not available</h1>
-      <p>It may have been moved or hidden.</p><p><a class="btn btn-primary" href="#programs">${teacher ? 'Programs' : 'My programs'}</a></p></div></div>`,
+      <p>It may have been moved or hidden.</p><p><a class="btn btn-primary" href="#${previewId ? `program-${previewId}` : 'programs'}">${previewId ? 'Back to Student view' : teacher ? 'Programs' : 'My programs'}</a></p></div></div>`,
   };
 }
 
-async function room({ lessonId, materialId, finish = false }) {
+async function room({ lessonId, materialId, finish = false, previewId }) {
   const teacher = isTeacher();
   const studentId = S.me.id;
   const sameAccount = () => S.api.me?.id === studentId;
   const [tree, attempts] = await Promise.all([S.api.tree(), teacher ? [] : S.api.listAttempts({ student_id: S.me.id })]);
-  const found = materialId ? findMaterial(tree, materialId) : findLesson(tree, lessonId);
-  if (!found) return notFound(teacher);
+  const sourceCourse = previewId && tree.find((c) => c.id === previewId);
+  const preview = teacher && hasStoryPreview(sourceCourse);
+  if (previewId && !preview) return notFound(teacher, previewId);
+  const visibleTree = preview ? [storyPreviewCourse(sourceCourse, studentId)] : tree;
+  const found = materialId ? findMaterial(visibleTree, materialId) : findLesson(visibleTree, lessonId);
+  if (!found) return notFound(teacher, previewId);
   const { lesson } = found;
   let { course } = found;
+  const route = (page, id) => preview ? previewRoute(course.id, page, id) : `${page}-${id}`;
   const mats = lesson.materials;
   const lessonNo = course.lessons.indexOf(lesson) + 1;
   const ending = lesson.materials.find((m) => m.story);
-  const nextLesson = () => !teacher && ending
+  const nextLesson = () => (!teacher || preview) && ending
     ? storyDestination(course, ending)
     : course.lessons[course.lessons.findIndex((l) => l.id === lesson.id) + 1];
   let idx = progressIndex(attempts);
@@ -47,8 +60,8 @@ async function room({ lessonId, materialId, finish = false }) {
   let cur = -1;
   if (materialId) cur = found.index;
   else if (!finish && mats.length) {
-    cur = teacher || lessonDone(lesson, idx) ? 0 : Math.max(0, mats.findIndex((m) => !sectionDone(m, idx)));
-    history.replaceState(null, '', `#play-${mats[cur].id}`);
+    cur = (teacher && !preview) || lessonDone(lesson, idx) ? 0 : Math.max(0, mats.findIndex((m) => !sectionDone(m, idx)));
+    history.replaceState(null, '', `#${route('play', mats[cur].id)}`);
   }
   const mat = cur >= 0 ? mats[cur] : null;
   // The result from an earlier visit, shown until the student starts again.
@@ -72,13 +85,13 @@ async function room({ lessonId, materialId, finish = false }) {
     ${mats.map((m, k) => {
       const st = stateOf(m);
       const on = k === cur;
-      return html`<li><a class="sec-link ${st.cls} ${on ? 'is-on' : ''}" href="#play-${m.id}" ${on ? 'aria-current="step"' : ''}>
+      return html`<li><a class="sec-link ${st.cls} ${on ? 'is-on' : ''}" href="#${route('play', m.id)}" ${on ? 'aria-current="step"' : ''}>
         <span class="sec-mark" aria-hidden="true"></span>
         <span class="sec-name">${m.title}</span>
         ${st.note ? html`<span class="sec-note ${st.a && st.a.score != null ? scoreClass(st.a) : ''}">${st.note}</span>` : ''}
         <span class="sr-only">${st.cls === 'is-done' ? ', done' : st.cls === 'is-started' ? ', started' : ''}</span></a></li>`;
     })}
-    <li><a class="sec-link sec-finish ${finish ? 'is-on' : ''}" href="#finish-${lesson.id}" ${finish ? 'aria-current="step"' : ''}>${icon('flag')}<span class="sec-name">Finish lesson</span></a></li>
+    <li><a class="sec-link sec-finish ${finish ? 'is-on' : ''}" href="#${route('finish', lesson.id)}" ${finish ? 'aria-current="step"' : ''}>${icon('flag')}<span class="sec-name">Finish lesson</span></a></li>
   </ol>`;
   const paintSide = () => { const box = document.getElementById('sec-box'); if (box) box.innerHTML = sideList().toString(); };
   const markDone = (a) => {
@@ -94,6 +107,7 @@ async function room({ lessonId, materialId, finish = false }) {
 
   // ---------- top bar ----------
   const progressBlock = () => {
+    if (preview) return html`<span class="chip chip-note" title="Story choices stay in this browser">Story preview</span>`;
     if (teacher) return html`<span class="chip chip-note">Preview: nothing is saved for the teacher</span>`;
     const st = courseStats(course, idx);
     const pct = st.total ? Math.round((100 * st.done) / st.total) : 0;
@@ -198,10 +212,10 @@ async function room({ lessonId, materialId, finish = false }) {
     const prev = cur > 0 ? mats[cur - 1] : null;
     const next = cur < mats.length - 1 ? mats[cur + 1] : null;
     return html`<footer class="sec-foot">
-      ${prev ? html`<a class="btn" href="#play-${prev.id}">${icon('back')} Back</a>` : html`<span></span>`}
+      ${prev ? html`<a class="btn" href="#${route('play', prev.id)}">${icon('back')} Back</a>` : html`<span></span>`}
       <span class="sec-count">${cur + 1} of ${mats.length}</span>
-      ${next ? html`<a class="btn btn-primary" href="#play-${next.id}">Next ${icon('next')}</a>`
-        : html`<a class="btn btn-primary" href="#finish-${lesson.id}">Finish lesson ${icon('next')}</a>`}
+      ${next ? html`<a class="btn btn-primary" href="#${route('play', next.id)}">Next ${icon('next')}</a>`
+        : html`<a class="btn btn-primary" href="#${route('finish', lesson.id)}">Finish lesson ${icon('next')}</a>`}
     </footer>`;
   };
 
@@ -267,21 +281,22 @@ async function room({ lessonId, materialId, finish = false }) {
       ${max ? html`<p class="finish-total">Exercises: <strong>${total} / ${max}</strong></p>` : ''}
       <ol class="finish-list">${mats.map((m) => {
         const p = teacher || m.story?.only ? null : idx.get(m.id);
-        return html`<li class="${!teacher && sectionDone(m, idx) ? 'is-done' : p ? 'is-started' : ''}"><a href="#play-${m.id}">${m.title}</a><span class="${p?.completed?.score != null ? `score ${scoreClass(p.completed)}` : 'muted small'}">${teacher ? '' : exerciseLine(m)}</span></li>`;
+        return html`<li class="${!teacher && sectionDone(m, idx) ? 'is-done' : p ? 'is-started' : ''}"><a href="#${route('play', m.id)}">${m.title}</a><span class="${p?.completed?.score != null ? `score ${scoreClass(p.completed)}` : 'muted small'}">${teacher ? '' : exerciseLine(m)}</span></li>`;
       })}</ol>
-      ${teacher ? html`<p class="notice small">Students press this button at the end of a lesson. Their unfinished exercises are saved as they are, and you get one email with all the results.</p>` : ''}
+      ${teacher && !preview ? html`<p class="notice small">Students press this button at the end of a lesson. Their unfinished exercises are saved as they are, and you get one email with all the results.</p>` : ''}
       ${!teacher && !sent && unopened.length ? html`<p class="notice notice-warn small">Not opened yet: ${unopened.map((m) => m.title).join(', ')}. You can go back to ${unopened.length === 1 ? 'it' : 'them'}, or finish now.</p>` : ''}
       ${!teacher && !sent && pending.length ? html`<p class="notice small">Not finished yet: ${pending.map((m) => m.title).join(', ')}. ${pending.length === 1 ? 'It is' : 'They are'} sent as ${pending.length === 1 ? 'it is' : 'they are'}.</p>` : ''}
-      ${!teacher && ending && !next ? html`<p class="notice">${ending.decision ? STORY_PENDING : html`<a href="#play-${ending.id}">Choose what happens next to continue your story.</a>`}</p>` : ''}
+      ${(!teacher || preview) && ending && !next ? html`<p class="notice">${ending.decision ? STORY_PENDING : html`<a href="#${route('play', ending.id)}">Choose what happens next to continue your story.</a>`}</p>` : ''}
       <div class="row-end finish-actions">
         <a class="btn" href="#program-${course.id}">All lessons</a>
-        ${next && (teacher || sent || complete || ending?.decision) ? html`<a class="btn ${sent || teacher ? 'btn-primary' : ''}" href="#lesson-${next.id}">Next lesson: ${next.title} ${icon('next')}</a>` : ''}
+        ${next && (teacher || sent || complete || ending?.decision) ? html`<a class="btn ${sent || teacher ? 'btn-primary' : ''}" href="#${route('lesson', next.id)}">Next lesson: ${next.title} ${icon('next')}</a>` : ''}
         ${!teacher && !sent ? html`<button class="btn btn-primary" data-on="finish-lesson">${icon('flag')} ${complete ? `Send results to ${teacherName()}` : `Finish and send to ${teacherName()}`}</button>` : ''}
       </div>
     </div>`;
   };
 
   async function finishLesson() {
+    if (teacher) return;
     const now = new Date().toISOString();
     // Exercises started (or started again) but not finished are sent as they are.
     for (const a of mats.filter((m) => !m.story?.only).map(openAttempt).filter(Boolean)) await S.api.updateAttempt(a.id, { status: 'completed', finished_at: now });
@@ -306,10 +321,13 @@ async function room({ lessonId, materialId, finish = false }) {
   let mounted = false;
   async function confirmStory(choice, predictions) {
     if (!mounted || !sameAccount()) throw new Error('Open the section again to save your choice.');
-    const decision = await S.api.confirmStoryDecision({ course_id: course.id, material_id: mat.id, choice, predictions });
-    const tree = await S.api.tree();
+    if (teacher && !preview) throw new Error('Open Student view to confirm a story choice.');
+    const decision = preview
+      ? confirmPreviewDecision(sourceCourse, studentId, mat.id, choice, predictions)
+      : await S.api.confirmStoryDecision({ course_id: course.id, material_id: mat.id, choice, predictions });
+    const updated = preview ? storyPreviewCourse(sourceCourse, studentId) : (await S.api.tree()).find((c) => c.id === course.id);
     if (mounted && sameAccount()) {
-      course = tree.find((c) => c.id === course.id) || course;
+      course = updated || course;
       mat.decision = decision;
       paintSide();
       paintProgress();
@@ -321,8 +339,9 @@ async function room({ lessonId, materialId, finish = false }) {
     if (!container || !mat.story) return;
     cleanStory?.();
     cleanStory = bindStoryControls(container, {
-      material: mat, teacher, confirm: confirmStory,
-      navigate: (id) => go('lesson-' + id),
+      material: mat, teacher: teacher && !preview, confirm: confirmStory,
+      navigate: (id) => go(route('lesson', id)),
+      lessonHref: (id) => '#' + route('lesson', id),
       destination: (decision) => storyDestination(course, mat, decision),
     });
   }
@@ -334,11 +353,11 @@ async function room({ lessonId, materialId, finish = false }) {
     html: html`
       <div class="room" style="--prog:${course.color || '#1f4fd1'}">
         <header class="room-bar">
-          <a class="btn btn-sm room-back" href="#program-${course.id}">${icon('back')}<span>All lessons</span></a>
+          <a class="btn btn-sm room-back" aria-label="All lessons" href="#program-${course.id}">${icon('back')}<span>All lessons</span></a>
           <div class="room-prog" id="room-prog">${progressBlock()}</div>
           <span class="room-course hide-sm">${course.title}</span>
           ${teacher ? html`<a class="btn btn-sm hide-sm" href="#edit-program-${course.id}">${icon('edit')} Edit</a>` : ''}
-          <a class="icon-btn" href="#programs" aria-label="Close the lesson" title="Close">${icon('close')}</a>
+          <a class="icon-btn" href="#${preview ? `program-${course.id}` : 'programs'}" aria-label="Close the lesson" title="Close">${icon('close')}</a>
         </header>
         <div class="room-body">
           <main class="room-card room-main ${mat ? `is-${mat.kind}` : ''}" id="room-main">${finish ? finishHtml() : sectionHtml()}</main>
@@ -389,7 +408,7 @@ async function room({ lessonId, materialId, finish = false }) {
               const href = frame.contentWindow.location.href;
               if (href === 'about:blank') return;
               const other = otherSection(href);
-              if (other) { go('play-' + other.id); return; }
+              if (other) { go(route('play', other.id)); return; }
             } catch { /* cross-origin section */ }
             if (branching && new URL(address, location.href).origin === location.origin) frame.src = address;
             return;
@@ -403,7 +422,7 @@ async function room({ lessonId, materialId, finish = false }) {
             const other = otherSection(target.href);
             if (other) {
               event.preventDefault();
-              go('play-' + other.id);
+              go(route('play', other.id));
             } else if (branching && target.pathname.startsWith('/miro-exercises/') && /\.html?$/i.test(target.pathname)) {
               event.preventDefault();
             }

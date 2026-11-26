@@ -21,6 +21,7 @@ const ROUTES = {
     programs: tea.programEditorView, 'edit-program': tea.editProgramView, library: tea.libraryView,
     reviews: tea.reviewsView, review: tea.reviewView, calendar: tea.calendarView, requests: tea.requestsView,
     'site-setup': tea.siteSetupView, 'my-profile': stu.profileView,
+    'preview-lesson': room.storyPreviewRoom, 'preview-play': room.storyPreviewRoom, 'preview-finish': room.storyPreviewRoom,
     program: stu.programView, lesson: room.lessonRoom, play: room.playRoom, finish: room.finishRoom, book: pub.bookView, pay: bill.payView, home: pub.homeView,
   },
 };
@@ -52,7 +53,7 @@ const NAV = {
 };
 const MOBILE_MAIN = { student: 5, teacher: 5 };
 const SHORT = { 'my-profile': 'Profile' }; // labels in the narrow bottom bar
-const FULL_PAGE = new Set([room.lessonRoom, room.playRoom, room.finishRoom]); // lesson pages use the whole screen
+const FULL_PAGE = new Set([room.lessonRoom, room.playRoom, room.finishRoom, room.storyPreviewRoom]); // lesson pages use the whole screen
 
 function parse(hash) {
   const h = decodeURIComponent(String(hash || '').replace(/^#\/?/, ''));
