@@ -127,3 +127,7 @@ New exercises follow `exercise-kit/CHATGPT-INSTRUCTIONS.md`: they load the websi
 - **Emails to students** (each can be switched off on *Website → Emails to students*): lesson reminders, a moved or cancelled lesson, your feedback on an exercise, a new program, payment receipts, a warning when the balance is less than one lesson, a welcome email when you approve an account, and invitations. Receipts for every lesson held are off by default. Students can turn all emails off in their profile. *Website → Email sending* shows whether sending works and lists the latest emails.
 - **"Forgot password" emails** go through Resend: Supabase → *Authentication → Emails → SMTP Settings*, host `smtp.resend.com`, port `465`, user `resend`, password: a Resend API key, sender `lessons@dashaenglish.com`.
 - **Trying things safely:** add `?demo` to the address (`https://dashaenglish.com/?demo`) to use the website with sample data that stays in your browser. Real data is not touched.
+
+## Branching Advent lessons
+
+See [the website guide](docs/WEBSITE-GUIDE.md#branching-stories) for the SQL deployment steps, the Advent preset, and instructions for adding future chapters.

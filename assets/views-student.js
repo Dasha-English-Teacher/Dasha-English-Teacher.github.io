@@ -1,6 +1,6 @@
 // Student pages: programs, lessons, schedule, words, results, profile and balance.
 import { html, icon, toast, openModal, nl2br, fmtDate, fmtDateLong, fmtTime, fmtDateTime, timeAgo, duration, pct, plural, sameDay, ask } from './ui.js';
-import { S, go, refresh, isTeacher, progressIndex, lessonDone, courseStats, scoreText, scoreClass, gcalUrl, icsText, downloadText, teacherName, money, priceOf, ledgerFor, balanceLevel, invalidateNav, isExerciseAttempt } from './core.js';
+import { S, go, refresh, isTeacher, progressIndex, sectionDone, lessonDone, courseStats, scoreText, scoreClass, gcalUrl, icsText, downloadText, teacherName, money, priceOf, ledgerFor, balanceLevel, invalidateNav, isExerciseAttempt } from './core.js';
 import { balanceCard, ledgerItems, ledgerList } from './views-billing.js';
 
 // ---------- shared pieces ----------
@@ -99,8 +99,8 @@ export async function programView({ id }) {
 
   const card = (l, i) => {
     const total = l.materials.length;
-    const done = teacher ? 0 : l.materials.filter((m) => idx.get(m.id)?.done).length;
-    const started = !teacher && l.materials.some((m) => idx.get(m.id));
+    const done = teacher ? 0 : l.materials.filter((m) => sectionDone(m, idx)).length;
+    const started = !teacher && l.materials.some((m) => m.decision || (!m.story?.only && idx.get(m.id)));
     const finished = !teacher && lessonDone(l, idx);
     const state = finished ? 'done' : started ? 'started' : '';
     return html`<li data-title="${l.title.toLowerCase()}"><a class="lesson-card ${state ? `is-${state}` : ''}" href="#lesson-${l.id}">

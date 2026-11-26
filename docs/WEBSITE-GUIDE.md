@@ -177,7 +177,7 @@ export async function exampleView({ id }) {
 - Every database call goes through `S.api`. Both versions (live and demo) must have the same functions.
 - `FIELDS` lists the columns that may be saved for each table. A new column must be added here, or it is silently not saved.
 - `DEFAULT_SETTINGS` holds every *Website* setting with its default value.
-- Demo mode: sample students, programs and results in `demoSeed()`, kept in the browser's localStorage under `english-studio-demo-v2`. If the shape of the demo data changes (for example a new table), add it to `demoSeed()` and change the key to `-v3` so old demo data is replaced.
+- Demo mode: sample students, programs and results in `demoSeed()`, kept in the browser's localStorage under `english-studio-demo-v3`. If the shape of the demo data changes (for example a new table), add it to `demoSeed()` and increment the key version so old demo data is replaced.
 
 ### Words and style in the interface
 Plain, short English; sentence case; the action word on buttons ("Save changes", "Add a section"), and the same word in the message afterwards ("Section added"). Use Program / Lesson / Section / Exercise consistently. Error messages say what to do.
@@ -204,6 +204,7 @@ Everything is defined in `supabase/schema.sql`. Dashboard: https://supabase.com/
 | `courses` | A **program** (title, description, emoji, color, level, `published`, `sort`) |
 | `lessons` | A lesson in a program (`course_id`, title, `published`, `sort`) |
 | `materials` | A **section** of a lesson (`lesson_id`, `kind` exercise/video/link/text, title, `url`, `body`, `sort`) |
+| `story_decisions` | One confirmed choice per student, program and decision section, with ungraded predictions when present |
 | `enrollments` | Which student can open which program (`course_id`, `student_id`) |
 | `attempts` | A student's work on a section: status in_progress/completed, `score`/`max_score`, first score, `answers` (list), `seconds`, `revealed` (answer key opened), teacher `feedback`, `reviewed` |
 | `sessions` | A lesson in the calendar (student, start, minutes, meeting link, status scheduled/done/cancelled/missed) |
@@ -275,6 +276,32 @@ All emails use one layout (`email_layout()` in `schema.sql`); the sender is the 
 2. Otherwise (same address only): it reads score text on the page ("Score: 12 / 18", "12 / 27 correct", "All 15 correct") and collects what the student chose or typed.
 3. `reportAnswerKeyShown()` (or a "Show answers" button) is recorded as "answer key opened".
 The rules for new exercises are in `exercise-kit/CHATGPT-INSTRUCTIONS.md`, with two working examples.
+
+### Branching stories
+
+Open **Programs → Edit → Story decisions**. Each decision belongs to a section and offers choices that lead to other lessons in the same program. Students see a destination lesson after they confirm its choice. Their progress counts the lessons on their path. The teacher can preview every lesson and open each student's confirmed choices under **Story decisions**.
+
+#### Set up the Christmas Advent Calendar
+
+1. Keep the existing Part 3 and Part 4 lessons and section URLs. The two Part 4 folders need separate lessons in the same program as Part 3. If either lesson is missing, use **New lesson from a GitHub folder** to add it.
+2. Click **Set up Advent branching** once in the program editor. The preset matches the existing exercise URLs, connects Part 3 to the boyfriend and car lessons, and adds both Part 4 decisions with their original choices. Publish the Part 4 lessons so students can open their selected route.
+3. When Part 5 is ready, add its lessons as drafts. Open **Edit decision** on the two Part 4 rules and assign the destination for each existing choice. Publish the new lessons after saving the rules. Leave a destination as **Next chapter coming soon** until it is ready. Students who already confirmed that choice can open the lesson as soon as it is published.
+
+#### Add a decision to another chapter
+
+1. Add the destination lessons as drafts. In **Story decisions**, click **Add a story decision** and choose the exercise section where students will decide, usually the last section in the lesson.
+2. Enter the choice text and select the matching destination lesson for each choice. Leave the destination empty if the next chapter is planned. To add a third choice, save and reopen **Edit decision**. Each destination belongs to one choice. To continue a branch into another branching chapter, add a decision to the next lesson the same way.
+3. Tick **This section has no graded or written work** for a section used only to make a story choice. For a mixed section, leave it unchecked to keep grading or written answers. The website shows the decision below the exercise. The three Advent decisions already have controls inside their exercises.
+4. Publish the destinations after saving the rules. Use **Student view** to inspect both branches as the teacher. In demo mode, switch between students to check that each sees only their own route.
+
+After a student confirms a choice, it is locked to their account. If they need to choose again, expand their name in **Confirmed student choices** and click **Reset this student's story choices**. This resets every story choice for that student in this program and locks the branches again. Exercise results and feedback stay in Results.
+
+#### Deploy the Advent feature
+
+1. In Supabase, export affected tables to CSV before applying the change. Back up `courses`, `lessons` and `materials`, and export `story_decisions` if it already exists.
+2. In Supabase → **SQL Editor**, run only [the story decisions migration](../supabase/migrations/20261126182516_story_decisions.sql). It can be run again safely. It adds decision storage and updates lesson access.
+3. Merge the website pull request and wait for GitHub Pages to publish. Merge the exercise pull request and wait for its Pages deployment.
+4. Run **Set up Advent branching** in the existing Advent program. Smoke-test both choices using demo mode and verify the live program in the teacher view. Continue to put each exercise in its own program section so the app can route its links and save any graded results to the correct section.
 
 ## 10. How to make common changes (step by step)
 

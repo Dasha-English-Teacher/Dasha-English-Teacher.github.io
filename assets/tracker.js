@@ -104,7 +104,7 @@ export function collectAnswers(doc) {
   const out = [];
   const seen = new Set();
   const push = (el, value) => {
-    if (seen.has(el) || out.length >= 150) return;
+    if (el.closest('[data-story-decision]') || seen.has(el) || out.length >= 150) return;
     seen.add(el);
     const box = el.closest(CONTAINER);
     const v = String(value ?? '');
@@ -143,7 +143,7 @@ export function collectAnswers(doc) {
   return out;
 }
 
-export function createTracker(iframe, { onChange = () => {}, studentName = '' } = {}) {
+export function createTracker(iframe, { onChange = () => {}, studentName = '', acceptsDocument = () => true } = {}) {
   const state = {
     score: null, max: null, firstScore: null, firstMax: null,
     revealed: false, interacted: false, seconds: 0, answers: [], explicit: false,
@@ -216,6 +216,7 @@ export function createTracker(iframe, { onChange = () => {}, studentName = '' } 
 
   function onMessage(ev) {
     if (ev.source !== iframe.contentWindow || !ev.data || ev.data.source !== 'english-studio') return;
+    if (!acceptsDocument()) return;
     const d = ev.data;
     markActive();
     if (d.type === 'result' && Number.isFinite(+d.score) && Number.isFinite(+d.total) && +d.total > 0) {
@@ -240,6 +241,7 @@ export function createTracker(iframe, { onChange = () => {}, studentName = '' } 
     observer?.disconnect();
     doc = null;
     state.sameOrigin = false;
+    if (!acceptsDocument()) return;
     try { doc = iframe.contentDocument; } catch (e) { doc = null; }
     if (!doc || !doc.body) return;
     state.sameOrigin = true;
@@ -263,7 +265,9 @@ export function createTracker(iframe, { onChange = () => {}, studentName = '' } 
       });
     }
 
+    const isStory = (e) => e.target.closest?.('[data-story-decision]');
     const onClick = (e) => {
+      if (isStory(e)) return;
       // Following a link to another page (for example "Next exercise") is not work on this exercise.
       const link = e.target.closest && e.target.closest('a[href]');
       const href = link ? link.getAttribute('href').trim() : '';
@@ -281,11 +285,11 @@ export function createTracker(iframe, { onChange = () => {}, studentName = '' } 
       if (CHECK_ALL.test(label) && !ROW_CHECK.test(label)) checkAllAt = Date.now();
       scheduleScan(250);
     };
-    const onInput = () => { markActive(); emit('answers'); };
+    const onInput = (e) => { if (!isStory(e)) { markActive(); emit('answers'); } };
     doc.addEventListener('click', onClick, true);
     doc.addEventListener('change', onInput, true);
     doc.addEventListener('input', onInput, true);
-    doc.addEventListener('keydown', markActive, true);
+    doc.addEventListener('keydown', (e) => { if (!isStory(e)) markActive(); }, true);
     doc.addEventListener('drop', () => { markActive(); scheduleScan(); emit('answers'); }, true);
 
     observer = new MutationObserver(() => { if (state.interacted) scheduleScan(); });

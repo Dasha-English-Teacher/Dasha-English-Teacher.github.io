@@ -118,12 +118,17 @@ export function progressIndex(attempts) {
   return map;
 }
 
+export function sectionDone(material, idx) {
+  if (material.story && !material.decision) return false;
+  return !!(material.story?.only || idx.get(material.id)?.done);
+}
+
 // A lesson is done when all its exercises are done. Lessons without exercises
 // (only links, videos, notes) are done when every item is marked as done.
 export function lessonDone(lesson, idx) {
   const ex = lesson.materials.filter((m) => m.kind === 'exercise');
   const need = ex.length ? ex : lesson.materials;
-  return need.length > 0 && need.every((m) => idx.get(m.id)?.done);
+  return need.length > 0 && need.every((m) => sectionDone(m, idx));
 }
 
 export function courseStats(course, idx) {
