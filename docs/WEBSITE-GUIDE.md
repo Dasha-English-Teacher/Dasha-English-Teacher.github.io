@@ -292,9 +292,15 @@ Open **Programs → Edit → Story decisions**. Each decision belongs to a secti
 1. Add the destination lessons as drafts. In **Story decisions**, click **Add a story decision** and choose the exercise section where students will decide, usually the last section in the lesson.
 2. Enter the choice text and select the matching destination lesson for each choice. Leave the destination empty if the next chapter is planned. To add a third choice, save and reopen **Edit decision**. Each destination belongs to one choice. To continue a branch into another branching chapter, add a decision to the next lesson the same way.
 3. Tick **This section has no graded or written work** for a section used only to make a story choice. For a mixed section, leave it unchecked to keep grading or written answers. The website shows the decision below the exercise. The three Advent decisions already have controls inside their exercises.
-4. Publish the destinations after saving the rules. Use **Student view** to inspect both branches as the teacher. In demo mode, switch between students to check that each sees only their own route.
+4. Publish the destinations after saving the rules. Use **Student view** to test each branch as the teacher. In demo mode, switch between students to check that each sees only their own route.
 
 After a student confirms a choice, it is locked to their account. If they need to choose again, expand their name in **Confirmed student choices** and click **Reset this student's story choices**. This resets every story choice for that student in this program and locks the branches again. Exercise results and feedback stay in Results.
+
+#### Test a story in Student view
+
+Open **Student view** from Programs or the program editor. Only published lessons on the preview path are shown. Confirm a choice with **Continue my story**, then use **Next lesson** in the exercise or on the **Finish lesson** screen. If a destination is still a draft or has yet to be added, the preview shows the same coming-soon message as the student view.
+
+Preview choices survive a refresh in this browser and belong to your teacher account and this program. Return to the program's **Student view** and click **Reset story preview** to test another path. Preview choices, attempts and scores stay out of the database. The editor still lists both branches, and you can open any lesson directly from there.
 
 #### Deploy the Advent feature
 

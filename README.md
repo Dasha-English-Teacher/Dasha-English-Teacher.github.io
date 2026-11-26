@@ -130,4 +130,4 @@ New exercises follow `exercise-kit/CHATGPT-INSTRUCTIONS.md`: they load the websi
 
 ## Branching Advent lessons
 
-See [the website guide](docs/WEBSITE-GUIDE.md#branching-stories) for the SQL deployment steps, the Advent preset, and instructions for adding future chapters.
+See [the website guide](docs/WEBSITE-GUIDE.md#branching-stories) for the Advent preset, future chapters, and how to test and reset a story in Student view.

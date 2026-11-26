@@ -33,7 +33,7 @@ export function storyDestination(course, material, decision = material.decision)
   return course.lessons.find((l) => l.id === id);
 }
 
-export function bindStoryControls(container, { material, teacher, confirm, destination, navigate }) {
+export function bindStoryControls(container, { material, teacher, confirm, destination, navigate, lessonHref }) {
   const button = container.querySelector('[data-story-confirm]');
   const status = container.querySelector('[data-story-status]');
   const groups = [...container.querySelectorAll('[data-story-prediction], [data-story-options]')];
@@ -66,7 +66,7 @@ export function bindStoryControls(container, { material, teacher, confirm, desti
     // In an exercise frame, use the app's router through the parent callback.
     if (next) {
       const link = status.ownerDocument.createElement('a');
-      link.href = '#lesson-' + next.id;
+      link.href = lessonHref(next.id);
       link.textContent = 'Next lesson';
       link.addEventListener('click', (event) => {
         event.preventDefault();
@@ -90,7 +90,7 @@ export function bindStoryControls(container, { material, teacher, confirm, desti
 
   async function save() {
     if (button.disabled || decision) return;
-    if (teacher) { status.textContent = 'Teacher preview. Student choices are saved in their own accounts.'; return; }
+    if (teacher) { status.textContent = 'Open Student view to try this story choice.'; return; }
     saving = true;
     paint();
     try {

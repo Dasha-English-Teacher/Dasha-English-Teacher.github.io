@@ -1,3 +1,4 @@
+import { hasStoryPreview, previewRoute, resetStoryPreview, storyPreviewCourse } from './story-preview.js';
 // Student pages: programs, lessons, schedule, words, results, profile and balance.
 import { html, icon, toast, openModal, nl2br, fmtDate, fmtDateLong, fmtTime, fmtDateTime, timeAgo, duration, pct, plural, sameDay, ask } from './ui.js';
 import { S, go, refresh, isTeacher, progressIndex, sectionDone, lessonDone, courseStats, scoreText, scoreClass, gcalUrl, icsText, downloadText, teacherName, money, priceOf, ledgerFor, balanceLevel, invalidateNav, isExerciseAttempt } from './core.js';
@@ -90,11 +91,14 @@ export async function programsView() {
 // ---------- One program: its lessons ----------
 export async function programView({ id }) {
   const [tree, attempts] = await Promise.all([S.api.tree(), isTeacher() ? [] : S.api.listAttempts({ student_id: S.me.id })]);
-  const course = tree.find((c) => c.id === id);
+  let course = tree.find((c) => c.id === id);
   if (!course) return missing('This program is not available', 'programs');
+  const teacher = isTeacher();
+  const teacherId = S.me.id;
+  const preview = teacher && hasStoryPreview(course);
+  if (preview) course = storyPreviewCourse(course, teacherId);
   const idx = progressIndex(attempts);
   const st = courseStats(course, idx);
-  const teacher = isTeacher();
   let q = '';
 
   const card = (l, i) => {
@@ -103,7 +107,7 @@ export async function programView({ id }) {
     const started = !teacher && l.materials.some((m) => m.decision || (!m.story?.only && idx.get(m.id)));
     const finished = !teacher && lessonDone(l, idx);
     const state = finished ? 'done' : started ? 'started' : '';
-    return html`<li data-title="${l.title.toLowerCase()}"><a class="lesson-card ${state ? `is-${state}` : ''}" href="#lesson-${l.id}">
+    return html`<li data-title="${l.title.toLowerCase()}"><a class="lesson-card ${state ? `is-${state}` : ''}" href="#${preview ? previewRoute(course.id, 'lesson', l.id) : `lesson-${l.id}`}">
       <span class="lesson-tile" aria-hidden="true">${i + 1}</span>
       <span class="lesson-card-main"><span class="tile-label">Lesson ${i + 1}</span><strong>${l.title}</strong>
         <span class="muted small">${plural(total, 'section')}${started && !finished ? `, ${done} done` : ''}${teacher && !l.published ? ', hidden draft' : ''}</span></span>
@@ -117,12 +121,22 @@ export async function programView({ id }) {
     html: html`
       <nav class="crumbs"><a href="#programs">${teacher ? 'Programs' : 'My programs'}</a></nav>
       <div class="page-head with-tile">${tile(course, 'tile-lg')}<div><h1>${course.title}</h1>${course.description ? html`<p class="lede">${course.description}</p>` : ''}</div></div>
-      ${teacher ? html`<p class="notice small">This is what students see. <a href="#edit-program-${course.id}">Edit this program</a></p>` : html`
+      ${preview ? html`<div class="notice">
+        <p>Student view. Story choices are saved in this browser. <a href="#edit-program-${course.id}">Edit this program</a></p>
+        <button class="btn btn-sm" data-on="reset-story-preview">Reset story preview</button>
+      </div>` : teacher ? html`<p class="notice small">This is what students see. <a href="#edit-program-${course.id}">Edit this program</a></p>` : html`
         <div class="course-progress wide">${bar(st.done, st.total)}<span>${st.done} of ${plural(st.total, 'lesson')} completed</span></div>`}
       ${course.lessons.length > 6 ? html`<input type="search" class="search-wide" placeholder="Search lessons" data-input="q" aria-label="Search lessons">` : ''}
       ${course.lessons.length ? html`<ol class="lesson-cards" style="--prog:${course.color || '#1f4fd1'}">${course.lessons.map(card)}</ol>
         <p class="muted small empty-sm" id="no-lessons" hidden>No lessons match.</p>`
         : html`<div class="empty"><p>No lessons in this program yet.</p></div>`}`,
+    on: preview ? {
+      'reset-story-preview'() {
+        if (!isTeacher() || S.api.me?.id !== teacherId) return;
+        resetStoryPreview(teacherId, course.id);
+        refresh();
+      },
+    } : {},
     input: {
       q(el) {
         q = el.value.trim().toLowerCase();
