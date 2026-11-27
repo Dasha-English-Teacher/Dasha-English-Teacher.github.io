@@ -775,3 +775,25 @@ input.is-readonly { background: var(--paper); color: var(--ink-2); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Keep the lesson action in the page flow so the mobile keyboard can scroll past it. */
+.sec-frame.sec-frame-fit { flex: none; min-height: 0; }
+.sec-foot { display: block; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.sec-foot .btn, .finish-actions .btn-primary { width: 100%; min-height: 48px; justify-content: center; }
+.section-save-status { margin: 0 0 8px; color: var(--warn); }
+.section-save-status:empty { display: none; }
+.room-sections summary { cursor: pointer; padding: 12px 0; }
+.room-sections .sec-link { min-height: 48px; }
+.sec-title { min-width: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 760px) {
+  .room-bar .btn, .room-bar .icon-btn { min-width: 48px; min-height: 48px; }
+  .room-bar { position: static; padding-inline: max(10px, env(safe-area-inset-left)) max(10px, env(safe-area-inset-right)); }
+  .room-body { display: flex; flex-direction: column; gap: 8px; padding: 6px; }
+  .room-main, .room-side { width: 100%; min-width: 0; }
+  .room-main { min-height: 0; }
+  .room-side { order: -1; position: static; max-height: none; padding: 0 12px; }
+  .room-sections summary { min-height: 48px; }
+  .room-side .side-lesson { display: none; }
+  .room-prog .ring { display: none; }
+}

@@ -75,10 +75,16 @@ function roleNow() {
 const app = document.getElementById('app');
 let current = null;
 let renderToken = 0;
+let displayedHash = '';
 
 async function render(navigated = false) {
   const token = ++renderToken;
   if (/access_token=|error_description=|type=recovery/.test(location.hash)) return; // sign-in link: Supabase handles it first
+  if (current?.beforeLeave && await current.beforeLeave() === false) {
+    if (token === renderToken) history.replaceState(null, '', displayedHash || location.pathname);
+    return;
+  }
+  if (token !== renderToken) return;
   const role = roleNow();
   let { name, id } = parse(location.hash);
   const routes = ROUTES[role];
@@ -124,6 +130,7 @@ async function render(navigated = false) {
   document.title = view.title && view.title !== S.settings.site_name ? `${view.title}, ${S.settings.site_name}` : S.settings.site_name;
   if (!shell.dataset.keepScroll) window.scrollTo(0, 0);
   try { view.mount?.(fresh); } catch (e) { console.error(e); }
+  displayedHash = location.hash;
   const h1 = fresh.querySelector('h1');
   if (h1 && document.activeElement === document.body) { h1.tabIndex = -1; h1.focus({ preventScroll: true }); }
   if (role === 'teacher') updateBadges();

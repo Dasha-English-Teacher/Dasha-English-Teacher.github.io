@@ -26,7 +26,7 @@ Contents
 - **Visitors** (not signed in) see the public page: who Dasha is, *Book a lesson* (a Cal.com booking calendar plus a request form), *Pay* (Kaspi link and QR code) and *Sign in*.
 - **Students** sign in and see: *My programs* (their programs, lessons and sections), *Schedule* (their lessons with reminders), *Results* (scores, their answers and Dasha's feedback), *My words* (a word list), *Profile and balance* (contact details, balance, payments).
 - **The teacher (Dasha)** sees: *Today*, *Students* (invite, approve, notes, prices, balances), *Programs* (programs → lessons → sections, editor), *Results* (to review, feedback), *Payments* (balances, CSV export), *Calendar*, *Requests* (from visitors and new sign-ups), *Exercise library* (her HTML files on GitHub), *Website* (all settings), *Profile*.
-- **Lessons** open on their own full page (like Edvibe): the current section in the middle, all sections of the lesson listed on the right, *Back* / *Next*, and *Finish lesson*, which sends Dasha one email with every section's score.
+- **Lessons** open on their own full page (like Edvibe): the current section, a compact **Sections** menu, and one main action below the exercise. **Finish lesson** saves the summary and sends Dasha the configured email.
 - **Exercises** are Dasha's HTML files on GitHub. The website opens them inside the lesson, reads the score and the answers, and saves them.
 
 Words used everywhere (keep them the same in the website, emails and this guide):
@@ -264,11 +264,17 @@ All emails use one layout (`email_layout()` in `schema.sql`); the sender is the 
 6. Make sure the students are enrolled in the program (*Students* → the student → programs, or *Invite a student*).
 
 ### Sections
-- **Exercise**: an HTML file shown inside the lesson. Done when it shows a score or the student presses *I'm done*.
+- **Exercise**: an HTML file shown inside the lesson. The bottom action saves the current answers or score and advances to the next section.
 - **Video**: YouTube links play inside the lesson; other video links open in a new tab. Done when opened.
 - **Link**: opens in a new tab. Done when opened.
 - **Reading (text)**: plain text, line breaks kept (no formatting). For a formatted reading page, make an HTML page with the theme (it becomes an exercise section without a score).
 - The same exercise can be used in several lessons. *Finish lesson* completes unfinished exercises as they are and emails Dasha.
+
+### The bottom action in a lesson
+
+The lesson provides one main action below each section. Students save written work with **Save & continue**, move past reading or listening with **Continue**, and use **Check answers** before continuing from a graded exercise. **Continue my story** confirms story decisions. **Finish lesson** saves the lesson summary and sends the teacher notification when configured. If saving fails, the student stays on the section with their answers and can retry.
+
+Same-site exercises can declare a type with `data-lesson-mode` on the body. Give the grading button `data-lesson-check` and mark duplicate standalone navigation or submission controls with `data-lesson-standalone`. Leave recording, playback, answer keys and educational feedback visible. Standalone pages keep their controls. External frames retain their own interface and can report results through `report.js` when supported.
 
 ### How the website reads results
 `assets/tracker.js` watches the exercise in the frame:
@@ -298,7 +304,7 @@ After a student confirms a choice, it is locked to their account. If they need t
 
 #### Test a story in Student view
 
-Open **Student view** from Programs or the program editor. Only published lessons on the preview path are shown. Confirm a choice with **Continue my story**, then use **Next lesson** in the exercise or on the **Finish lesson** screen. If a destination is still a draft or has yet to be added, the preview shows the same coming-soon message as the student view.
+Open **Student view** from Programs or the program editor. Only published lessons on the preview path are shown. Confirm a choice with **Continue my story**, then use **Finish lesson** and open **Next lesson** from the summary. If a destination is still a draft or has yet to be added, the preview shows the same coming-soon message as the student view.
 
 Preview choices survive a refresh in this browser and belong to your teacher account and this program. Return to the program's **Student view** and click **Reset story preview** to test another path. Preview choices, attempts and scores stay out of the database. The editor still lists both branches, and you can open any lesson directly from there.
 
@@ -373,7 +379,7 @@ There is one teacher account by design. If ever needed: Supabase → *Table Edit
 
 - **Try without real data:** add `?demo` to the address: `https://dashaenglish.com/?demo`. The website runs with sample students and programs kept in that browser only; the *View as* menu at the bottom switches between the teacher, students and a visitor; *Reset* starts again. Nothing touches the real database.
 - **On a computer (for Codex or a developer):** in the repository folder run `python3 -m http.server 8000`, open `http://localhost:8000/?demo`. Check the browser console for errors.
-- **Check list for every change:** teacher pages and student pages; a lesson (exercise score saved, *Next*, *Finish lesson*); phone width (360px); no errors in the console; existing addresses still work.
+- **Check list for every change:** teacher pages and student pages; a lesson (exercise score saved, **Continue**, **Finish lesson**); phone widths from 320px; no errors in the console; existing addresses still work.
 - **Publishing:** a commit to `main` is live in 1–2 minutes (GitHub → *Actions* shows "pages build and deployment"). If the browser shows the old version, reload with Ctrl+F5 (Cmd+Shift+R on a Mac).
 - **Safer way:** changes as a pull request (Codex makes one). Dasha reads the description, then *Merge*. A merged pull request has a *Revert* button if something goes wrong.
 - **Undo a direct change:** GitHub → the file → *History* → open the older version → copy it → edit the current file → paste → *Commit changes*.
