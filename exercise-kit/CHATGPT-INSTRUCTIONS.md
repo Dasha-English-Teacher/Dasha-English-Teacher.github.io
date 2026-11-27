@@ -47,7 +47,9 @@ Then build the page from these ready parts (class names from exercise.css):
 ### Spoken answers and story decisions
 
 - Add recording controls only for exercises that ask students to record a spoken answer. The Advent recorder uses HTTPS, detects a supported audio format, and offers playback and file download. Reuse its shared controls and verified teacher chat for Advent speaking tasks.
-- Ask the student to select WhatsApp in the device’s share menu and finish sending there. When audio sharing is unavailable, offer download and the existing teacher chat so the student can attach the file. Keep the recording available until the student can download it, share it or explicitly continue.
+- Use the shared recorder’s **Record your answer**, **Stop recording**, playback, **Download**, and **Send via WhatsApp** controls. On devices without file sharing, the WhatsApp action starts the download and opens the existing teacher chat for manual attachment.
+- Downloading and sharing are optional. Checking answers and confirming a story choice leave the recording alone. Warn only when leaving with an unsaved recording, and give students time to stop an active recording.
+
 - A section that combines writing and a story choice keeps its written fields outside the `data-story-decision` container. Keep option wording and keys stable. Inside the decision, use `data-story-options`, `data-story-option`, `data-story-confirm` and `data-story-status`. Add the rule in the program editor with the same keys. Leave future destinations unset until the new chapter is ready.
 
 ## 4. Size and layout

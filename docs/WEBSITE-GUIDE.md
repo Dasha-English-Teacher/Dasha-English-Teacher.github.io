@@ -280,9 +280,9 @@ Same-site exercises can declare a type with `data-lesson-mode` on the body. Give
 
 ### Spoken recordings and WhatsApp
 
-Advent Part 3 **Discuss** and Part 5 **Clara prettier → Let’s continue** have spoken recording tasks. Students can record, stop, play and download the audio. **Send to teacher via WhatsApp** opens the device’s file-sharing menu when the browser supports audio files. Choose WhatsApp and the teacher’s chat there. If the menu is unavailable, download the audio, open the teacher’s existing WhatsApp chat from the recording controls, and attach the file manually. The lesson does not send the file or verify delivery.
+Advent Part 3 **Discuss** and Part 5 **Clara prettier → Let’s continue** use **Record your answer**, then **Stop recording**. The finished audio has a player, **Download**, and **Send via WhatsApp**. The WhatsApp action opens the device’s audio-file share menu when available. Otherwise it starts the download and opens the teacher’s existing chat. Attach the downloaded file there and send it yourself.
 
-Recordings stay in the exercise tab until it closes. Download or share the recording before moving on, or choose **Continue without sharing**. If microphone access is declined, allow access in the browser settings and try again. The controls detect a format supported by the browser. Passive listening keeps its existing audio player.
+Downloading and sharing are optional. Students can check answers or confirm a story choice with a recording on the page. If they leave with an unsaved recording, they can choose **Stay on page** or **Continue**. Stop an active recording before leaving. Browsers provide their own warning for closing or reloading the tab. If microphone access is declined, allow it in the browser settings and try again.
 
 ### How the website reads results
 `assets/tracker.js` watches the exercise in the frame:
