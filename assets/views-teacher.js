@@ -9,7 +9,7 @@ import { libraryView, lessonFromFolderDialog, flagMissingFiles, pickerList, grou
 const STATUS_LABEL = { active: 'Active', pending: 'Waiting for approval', paused: 'Paused', archived: 'Archived' };
 const SESSION_WORD = { scheduled: 'planned', done: 'held', missed: 'missed', cancelled: 'cancelled' };
 const EMOJIS = ['📘', '✍️', '🌿', '🗣️', '🎧', '🎬', '🧠', '💼', '✈️', '📈', '⭐', '☕'];
-const COLORS = ['#1f4fd1', '#1e8a5a', '#c2410c', '#7c3aed', '#0e7490', '#be185d', '#a16207', '#334155'];
+const COLORS = ['#1f4fd1', '#1e8a5a', '#c2410c', '#7c3aed', '#0e7490', '#be185d', '#a16207', '#334155', '#2b5342'];
 
 const nameOf = (profiles) => {
   const m = new Map(profiles.map((p) => [p.id, p.full_name || p.email || 'Student']));
@@ -481,7 +481,7 @@ function programDialog(course = null) {
       <div class="grid-2"><label>Level <span class="opt">optional</span><input name="level" value="${c.level}" maxlength="40" placeholder="B2"></label>
         <label class="check check-top"><input type="checkbox" name="published" ${c.published ? 'checked' : ''}> Visible to its students</label></div>
       <fieldset><legend>Icon</legend><div class="swatches">${EMOJIS.map((e) => html`<label class="swatch"><input type="radio" name="emoji" value="${e}" ${e === c.emoji ? 'checked' : ''}><span>${e}</span></label>`)}</div></fieldset>
-      <fieldset><legend>Colour</legend><div class="swatches">${COLORS.map((col) => html`<label class="swatch"><input type="radio" name="color" value="${col}" ${col === c.color ? 'checked' : ''}><span style="background:${col}" aria-label="${col}"></span></label>`)}</div></fieldset>
+      <fieldset><legend>Colour</legend><div class="swatches">${COLORS.map((col) => html`<label class="swatch"><input type="radio" name="color" value="${col}" ${col === c.color?.toLowerCase() ? 'checked' : ''}><span style="background:${col}" aria-label="${col}"></span></label>`)}</div></fieldset>
       <div class="row-end"><button class="btn" type="button" data-on="close">Cancel</button><button class="btn btn-primary" type="submit">${course ? 'Save changes' : 'Create program'}</button></div>
     </form>`,
     submit: {
