@@ -305,6 +305,23 @@ begin
     select 1 from public.lessons where id = p_lesson and course_id = p_course and published
   ) then return false; end if;
 
+  -- Completion links converge: one reachable, fully completed source is enough.
+  if exists (select 1 from jsonb_each(p_rules) r where r.value->>'complete' = p_lesson::text)
+    and not exists (
+      select 1 from jsonb_each(p_rules) r
+      join public.materials marker on marker.id::text = r.key
+      where r.value->>'complete' = p_lesson::text
+        and story_private.path_open(marker.lesson_id, p_course, p_rules, p_seen || p_lesson)
+        and not exists (
+          select 1 from public.materials needed
+          where needed.lesson_id = marker.lesson_id and not exists (
+            select 1 from public.attempts a
+            where a.material_id = needed.id and a.student_id = (select auth.uid())
+              and a.status = 'completed'
+          )
+        )
+    ) then return false; end if;
+
   return not exists (
     select 1 from jsonb_each(p_rules) rule
     where exists (

@@ -7,7 +7,7 @@ export function withStoryDecisions(courses, decisions) {
     for (const lesson of course.lessons) {
       for (const material of lesson.materials) {
         const rule = course.story_rules?.[material.id];
-        if (rule) {
+        if (rule && !rule.complete) {
           material.story = rule;
           material.decision = decisions.find((d) => d.course_id === course.id && d.material_id === material.id);
         }
@@ -17,14 +17,20 @@ export function withStoryDecisions(courses, decisions) {
   return courses;
 }
 
-export function storyPathOpen(course, lesson, decisions, seen = []) {
+export function storyPathOpen(course, lesson, decisions, completed = new Set(), seen = []) {
   if (!lesson?.published || seen.includes(lesson.id)) return false;
-  return Object.entries(course.story_rules || {}).every(([section, rule]) => {
-    if (!Object.values(rule.options).some((option) => option.lesson === lesson.id)) return true;
+  const gates = Object.entries(course.story_rules || {});
+  const sourceOf = (section) => course.lessons.find((l) => l.materials.some((m) => m.id === section));
+  const reachable = (source) => storyPathOpen(course, source, decisions, completed, [...seen, lesson.id]);
+  const arrivals = gates.filter(([, rule]) => rule.complete === lesson.id);
+  if (arrivals.length && !arrivals.some(([section]) => {
+    const source = sourceOf(section);
+    return source?.materials.length && source.materials.every((m) => completed.has(m.id)) && reachable(source);
+  })) return false;
+  return gates.every(([section, rule]) => {
+    if (!Object.values(rule.options || {}).some((option) => option.lesson === lesson.id)) return true;
     const decision = decisions.find((d) => d.course_id === course.id && d.material_id === section);
-    const source = course.lessons.find((l) => l.materials.some((m) => m.id === section));
-    return rule.options[decision?.choice]?.lesson === lesson.id
-      && storyPathOpen(course, source, decisions, [...seen, lesson.id]);
+    return rule.options[decision?.choice]?.lesson === lesson.id && reachable(sourceOf(section));
   });
 }
 
@@ -199,6 +205,84 @@ export function adventPartFiveRules(course) {
       only: false, embedded: true,
       options: Object.fromEntries(Object.entries(endings).map(([key, label]) => [key, { label, lesson: null }])),
     };
+  }
+  return rules;
+}
+
+
+const PART_SIX = [
+  ['Big house', 'new-house', 'New house option'],
+  ['Big house', 'beautiful-view', 'Beautiful view option'],
+  ['Sportcar', 'two-cars', '2 cars option'],
+  ['Sportcar', 'one-sports-car', 'drivable car option'],
+  ['Clara prettier', 'know-spanish', 'know spanish option'],
+  ['Clara prettier', 'old-body', 'Old body option'],
+  ['Handsome boyfriend', 'one-boyfriend', 'One boyfriend option'],
+  ['Handsome boyfriend', 'husband', 'Husband option'],
+];
+
+export function completeAdventRules(course) {
+  const find = adventSections(course.lessons);
+  const imported = new Set();
+  const verify = (folder, files) => {
+    const sections = files.map((file) => find(folder + '/' + file));
+    const lesson = course.lessons.find((l) => l.id === sections[0].lesson);
+    if (imported.has(lesson.id) || lesson.materials.length !== sections.length ||
+      sections.some((section, i) => lesson.materials[i].id !== section.id)) {
+      throw new Error(folder + ' must be a separate lesson with exactly those sections in file order.');
+    }
+    imported.add(lesson.id);
+    return lesson;
+  };
+  verify('Part 1', ['1_index.html', '2_post.html', '3_audio.html']);
+  verify('Part 2', ['1_index.html', '2_discuss.html', '3_audio.html']);
+  verify('Part 3', ['1_index.html', '2_discuss.html']);
+  verify('Part 4/car option', ['1-car-discussion.html', '2-car-reading.html', '3-car-listening.html']);
+  verify('Part 4/boyfriend option', ['1-boyfriend-listening.html', '2-boyfriend-reading.html']);
+  const endings = new Map();
+  for (const [folder, file] of [...PART_FIVE, ['Sportcar', '2-the-next-wish.html']]) {
+    const lesson = verify('Part 5/' + folder, ['1-lets-continue.html', file]);
+    endings.set(folder, lesson.materials[1].id);
+  }
+  const finale = verify('Part 7', ['1-the-unwrapping.html', '2-thank-you.html']);
+  const chapters = course.lessons.map((lesson) =>
+    /Christmas(?:%20| )advent\/Part(?:%20| )([1-7])\//i.exec(lesson.materials[0]?.url || '')?.[1]);
+  if (chapters.some((chapter, i) => i > 0 && chapter < chapters[i - 1])) {
+    throw new Error('Put the Advent lessons in chapter order, with the shared finale last.');
+  }
+  const rules = { ...course.story_rules };
+  function setChoice(section, key, option) {
+    rules[section] ||= { embedded: true, only: false, options: {} };
+    const current = rules[section].options[key];
+    if (current?.lesson && option.lesson && current.lesson !== option.lesson) {
+      throw new Error('Review the existing destination for ' + current.label + '.');
+    }
+    rules[section] = { ...rules[section], options: { ...rules[section].options, [key]: {
+      label: current?.label ?? option.label, lesson: option.lesson ?? current?.lesson ?? null,
+    } } };
+  }
+  for (const [section, rule] of Object.entries(adventStoryRules(course.lessons))) {
+    rules[section] ||= { ...rule, options: {} };
+    for (const [key, option] of Object.entries(rule.options)) setChoice(section, key, option);
+  }
+  const partFiveRules = adventPartFiveRules({ ...course, story_rules: rules });
+  Object.assign(rules, partFiveRules);
+  const sport = endings.get('Sportcar');
+  setChoice(find('Part 4/car option/3-car-listening.html').id, 'sports-car', {
+    label: 'Version 1 — Sports car', lesson: find('Part 5/Sportcar/1-lets-continue.html').lesson,
+  });
+  setChoice(sport, 'two-cars', { label: 'I want two of my cars with no damage and in separate parking spots.' });
+  setChoice(sport, 'one-sports-car', { label: 'I want only the sports car that is drivable.' });
+  for (const [folder, key, destination] of PART_SIX) {
+    const lesson = verify('Part 6/' + destination, ['1-lets-continue.html', '2-the-final-wish.html']);
+    const section = endings.get(folder);
+    setChoice(section, key, { ...rules[section].options[key], lesson: lesson.id });
+    const last = lesson.materials[1].id;
+    if (rules[last] && rules[last].complete !== finale.id) throw new Error('Review the existing rule at the end of ' + lesson.title + '.');
+    rules[last] = { complete: finale.id, routeLength: 7, options: {} };
+  }
+  if (imported.size !== course.lessons.length || Object.keys(rules).length !== 15) {
+    throw new Error('Review extra lessons or story decisions. The complete Advent story has 18 lessons and 15 rules.');
   }
   return rules;
 }

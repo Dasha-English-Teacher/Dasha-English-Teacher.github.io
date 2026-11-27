@@ -132,7 +132,7 @@ export function lessonDone(lesson, idx) {
 }
 
 export function courseStats(course, idx) {
-  const total = course.lessons.length;
+  const total = Object.values(course.story_rules || {}).find((rule) => rule.complete && rule.routeLength)?.routeLength ?? course.lessons.length;
   const done = course.lessons.filter((l) => lessonDone(l, idx)).length;
   return { total, done };
 }

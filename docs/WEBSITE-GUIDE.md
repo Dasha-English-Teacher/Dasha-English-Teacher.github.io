@@ -280,7 +280,7 @@ Same-site exercises can declare a type with `data-lesson-mode` on the body. Give
 
 ### Spoken recordings and WhatsApp
 
-Advent Part 3 **Discuss** and Part 5 **Clara prettier → Let’s continue** use **Record your answer**, then **Stop recording**. The finished audio has a player, **Download**, and **Send via WhatsApp**. The WhatsApp action opens the device’s audio-file share menu when available. Otherwise it starts the download and opens the teacher’s existing chat. Attach the downloaded file there and send it yourself.
+Advent speaking tasks in Parts 3, 5 and 6 use **Record your answer**, then **Stop recording**. The finished audio has a player, **Record again**, **Download**, and **Send via WhatsApp**. Replacing an unsaved recording asks for confirmation. The WhatsApp action opens the device’s audio-file share menu when available. Otherwise it starts the download and opens the teacher’s existing chat. Attach the downloaded file there and send it yourself.
 
 Downloading and sharing are optional. Students can check answers or confirm a story choice with a recording on the page. If they leave with an unsaved recording, they can choose **Stay on page** or **Continue**. Stop an active recording before leaving. Browsers provide their own warning for closing or reloading the tab. If microphone access is declined, allow it in the browser settings and try again.
 
@@ -327,6 +327,39 @@ The setup also adds a decision for the final section of each Part 5 route. Writt
 | Handsome boyfriend — The next wish | I want just one handsome boyfriend. / I don’t want boyfriends; I want a handsome rich husband. |
 
 When Part 6 is ready, use **Edit decision** on each relevant Part 5 section to attach its draft destination before publishing. Confirmed choices follow the newly assigned destination automatically.
+
+#### Complete Advent Parts 1–7
+
+The live Advent program already has all 18 lessons and 39 sections. Keep the existing lessons, sections, and URLs. The setup validates exact folders, section order and chapter order. For another copy, import each folder as a separate draft lesson, in chapter order, and add the expected files in filename order.
+
+After review, export the affected tables to CSV (`courses`, `lessons`, `materials`, `attempts` and `story_decisions`). Apply [the shared finale migration](../supabase/migrations/20261127230018_shared_story_finale.sql) before saving the new rules. It updates the existing lesson-access function and can be run again safely. Publish both repositories, then open **Programs → Christmas advent → Edit → Story decisions → Connect complete Advent story**. Review the full set of links before clicking **Save story decisions**. The action uses existing lesson and section IDs and retains confirmed choices. Apply and publish draft lessons only after reviewing the configuration.
+
+| Source lesson | Choice or completion | Destination |
+|---|---|---|
+| Part 1 | Continue | Part 2 |
+| Part 2 | Continue | Part 3 |
+| Part 3 | I want a new car. | Part 4: Car option |
+| Part 3 | I want a new boyfriend. | Part 4: Boyfriend option |
+| Part 4: Car option | Version 2 — Big house | Part 5: Big house |
+| Part 4: Car option | Version 1 — Sports car | Part 5: Sportcar |
+| Part 4: Boyfriend option | I wish I were prettier. | Part 5: Clara prettier |
+| Part 4: Boyfriend option | I wish my boyfriend were more handsome and had more money. | Part 5: Handsome boyfriend |
+| Part 5: Big house | I want a NEW house. | Part 6: New house option |
+| Part 5: Big house | I want to live with a beautiful view. | Part 6: Beautiful view option |
+| Part 5: Sportcar | I want two of my cars with no damage and in separate parking spots. | Part 6: Cars option |
+| Part 5: Sportcar | I want only the sports car that is drivable. | Part 6: Drivable car option |
+| Part 5: Clara prettier | I want to speak Spanish. | Part 6: Know Spanish option |
+| Part 5: Clara prettier | I want my old body to be prettier. | Part 6: Old body option |
+| Part 5: Handsome boyfriend | I want just one handsome boyfriend. | Part 6: One boyfriend option |
+| Part 5: Handsome boyfriend | I don’t want boyfriends; I want a handsome rich husband. | Part 6: Husband option |
+| Each of the eight Part 6 lessons above | Complete both sections on the selected route | Part 7 |
+| Part 7 | Finish lesson | End of program |
+
+**Add a completion link** lets you use this pattern in other programs. Link each source lesson to the same published destination. The destination opens when a student completes every section in any one reachable source lesson. Teacher Student View tracks section completion locally, and Reset story preview clears those practice completions. Advent student progress counts seven lessons, and the chosen route is revealed as the student progresses.
+
+### Advent visual standards
+
+Advent exercises load `Christmas advent/advent.css` and use the `advent-storybook` body class. Use the warm ivory and cream surfaces, forest green, burgundy accents, and serif headings. Add `advent-hero` only to decorative story illustrations. Keep screenshots, diagrams and videos sharp. Keep full image proportions and source assets. Writing fields use cream backgrounds, dark text and at least 16px text on phones.
 
 #### Add a decision to another chapter
 

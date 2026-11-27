@@ -516,7 +516,7 @@ export async function editProgramView({ id }) {
   const decisions = hasRules ? await S.api.listStoryDecisions(id) : [];
   const branching = storyEditor(course, decisions, name);
   const lessonReferenced = (lesson) => lesson.materials.some((m) => rules[m.id])
-    || Object.values(rules).some((r) => Object.values(r.options).some((o) => o.lesson === lesson.id));
+    || Object.values(rules).some((r) => r.complete === lesson.id || Object.values(r.options).some((o) => o.lesson === lesson.id));
   const checkLesson = (lesson) => {
     if (lessonReferenced(lesson)) throw new Error('Remove this lesson from the story decisions before moving or deleting it.');
   };
