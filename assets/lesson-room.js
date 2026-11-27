@@ -3,7 +3,7 @@ import { prepareExercise } from './exercise-frame.js';
 // The section the student is on (an exercise, a video, a text or a link) fills
 // the middle. All sections of the lesson are listed on the right, with
 // "Finish lesson" at the end. Exercises save by themselves while the student works.
-import { html, icon, toast, nl2br, plural } from './ui.js';
+import { ask, html, icon, toast, nl2br, plural } from './ui.js';
 import { S, go, isTeacher, findLesson, findMaterial, progressIndex, sectionDone, lessonDone, courseStats, scoreText, scoreClass, teacherName, notifyTeacher, siteUrl, siteAddress, youtubeId, normUrl } from './core.js';
 import { bindStoryControls, storyDestination, STORY_INSTRUCTION, STORY_PENDING } from './story.js';
 import { confirmPreviewDecision, hasStoryPreview, previewRoute, storyPreviewCourse } from './story-preview.js';
@@ -205,16 +205,11 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
       || (label === 'Continue my story' && !storyAction?.ready);
   }
 
-  const recordingPending = () => !!document.getElementById('exercise-frame')?.contentDocument?.querySelector('[data-recording-pending]');
-  function keepRecording() {
-    if (!recordingPending()) return false;
-    status('Stop recording, then download or share it. You can also continue without sharing from the recording controls.');
-    return true;
-  }
+  const recordingState = (state) => !!document.getElementById('exercise-frame')?.contentDocument?.querySelector('[data-recording-' + state + ']');
+  let recordingConfirmation;
 
   async function advanceSection() {
     if (busy) return;
-    if (!(frameTools?.mode === 'graded' && !checked) && keepRecording()) return;
     busy = true;
     paintAction();
     try {
@@ -255,7 +250,7 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
   </footer>`;
 
   function warnUnsaved(event) {
-    if (recordingPending() || (!teacher && revision !== savedRevision)) {
+    if (recordingState('pending') || recordingState('active') || (!teacher && revision !== savedRevision)) {
       event.preventDefault();
       event.returnValue = '';
     }
@@ -521,7 +516,20 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
     },
     async beforeLeave() {
       if (!sameAccount()) return;
-      if (keepRecording()) return false;
+      if (recordingState('active')) {
+        if (finishRequest?.studentId === studentId && finishRequest.lessonId === lesson.id) finishRequest = undefined;
+        status('Stop recording before leaving this section.');
+        return false;
+      }
+      if (recordingState('pending')) {
+        recordingConfirmation ||= ask('Your recording hasn’t been saved. Leave this page anyway?', {
+          cancel: 'Stay on page', ok: 'Continue',
+        }).finally(() => { recordingConfirmation = undefined; });
+        if (!(await recordingConfirmation)) {
+          if (finishRequest?.studentId === studentId && finishRequest.lessonId === lesson.id) finishRequest = undefined;
+          return false;
+        }
+      }
       if (teacher) return;
       clearTimeout(saveTimer);
       try {
