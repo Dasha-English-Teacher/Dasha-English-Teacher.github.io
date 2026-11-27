@@ -108,9 +108,11 @@ export function collectAnswers(doc) {
     seen.add(el);
     const box = el.closest(CONTAINER);
     const v = String(value ?? '');
+    const field = el.matches('textarea, input[type=text], [contenteditable=true]') ? el.id || el.name : '';
     out.push({
-      q: describe(box && box !== doc.body ? box : el.parentElement, el),
-      a: v.length > 3000 ? `${v.slice(0, 3000)}…` : v,
+      ...(field ? { field } : {}),
+      q: el.dataset.lessonAnswer || describe(box && box !== doc.body ? box : el.parentElement, el),
+      a: !field && v.length > 3000 ? `${v.slice(0, 3000)}…` : v,
       ok: correctness(el, box),
     });
   };
@@ -140,6 +142,7 @@ export function collectAnswers(doc) {
     if (PLACEHOLDER.test(v)) v = '';
     push(d, v);
   });
+  doc.querySelectorAll('button[data-lesson-answer][aria-pressed=true]').forEach((button) => push(button, clean(button.textContent)));
   return out;
 }
 
@@ -226,6 +229,7 @@ export function createTracker(iframe, { onChange = () => {}, studentName = '', a
         state.answers = d.answers.slice(0, 150).map((x) => ({ q: clean(x.q ?? x.question ?? ''), a: String(x.a ?? x.answer ?? ''), ok: typeof x.ok === 'boolean' ? x.ok : (typeof x.correct === 'boolean' ? x.correct : null) }));
       }
       setScore({ score: Math.max(0, Math.min(+d.score, +d.total)), max: +d.total }, 'explicit');
+      emit('answers');
     } else if (d.type === 'revealed') {
       if (!state.revealed && doc && !state.frozen && !state.explicitAnswers) { try { state.frozen = collectAnswers(doc); } catch (e) { /* ignore */ } }
       state.revealed = true;

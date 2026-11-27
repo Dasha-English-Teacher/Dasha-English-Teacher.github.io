@@ -33,7 +33,7 @@ export function storyDestination(course, material, decision = material.decision)
   return course.lessons.find((l) => l.id === id);
 }
 
-export function bindStoryControls(container, { material, teacher, confirm, destination, navigate, lessonHref }) {
+export function bindStoryControls(container, { material, teacher, confirm, destination, navigate, lessonHref, onAction }) {
   const button = container.querySelector('[data-story-confirm]');
   const status = container.querySelector('[data-story-status]');
   const groups = [...container.querySelectorAll('[data-story-prediction], [data-story-options]')];
@@ -58,13 +58,14 @@ export function bindStoryControls(container, { material, teacher, confirm, desti
       }
     }
     button.disabled = saving || (!decision && (!choice || groups.some((g) => g.dataset.storyPrediction && !predictions[g.dataset.storyPrediction])));
+    if (onAction) onAction({ ready: !button.disabled, save });
   }
 
   function showSaved() {
     const next = destination(decision);
     status.textContent = next ? 'Your choice has been saved.' : STORY_PENDING;
     // In an exercise frame, use the app's router through the parent callback.
-    if (next) {
+    if (next && !onAction) {
       const link = status.ownerDocument.createElement('a');
       link.href = lessonHref(next.id);
       link.textContent = 'Next lesson';
@@ -100,13 +101,14 @@ export function bindStoryControls(container, { material, teacher, confirm, desti
       predictions = decision.predictions;
       showSaved();
     } catch (error) {
-      if (active) status.textContent = error.message || 'Could not save your choice. Try again.';
+      if (active) { status.textContent = error.message || 'Could not save your choice. Try again.'; if (onAction) throw error; }
     } finally {
       saving = false;
       if (active) paint();
     }
   }
 
+  if (onAction) { button.hidden = true; button.style.setProperty('display', 'none', 'important'); }
   status.textContent = '';
   if (decision) showSaved();
   paint();
