@@ -274,6 +274,8 @@ All emails use one layout (`email_layout()` in `schema.sql`); the sender is the 
 
 The lesson provides one main action below each section. Students save written work with **Save & continue**, move past reading or listening with **Continue**, and use **Check answers** before continuing from a graded exercise. **Continue my story** confirms story decisions. **Finish lesson** saves the lesson summary and sends the teacher notification when configured. If saving fails, the student stays on the section with their answers and can retry.
 
+The bottom action uses the colour selected in **Programs → Edit → Settings → Colour**. The Christmas Advent program uses dark green (`#2B5342`). The lesson darkens lighter program colours when needed to keep white button text readable. This setting also colours the program’s lesson tiles.
+
 Same-site exercises can declare a type with `data-lesson-mode` on the body. Give the grading button `data-lesson-check` and mark duplicate standalone navigation or submission controls with `data-lesson-standalone`. Leave recording, playback, answer keys and educational feedback visible. Standalone pages keep their controls. External frames retain their own interface and can report results through `report.js` when supported.
 
 ### How the website reads results

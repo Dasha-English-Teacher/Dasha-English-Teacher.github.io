@@ -780,6 +780,29 @@ input.is-readonly { background: var(--paper); color: var(--ink-2); }
 .sec-frame.sec-frame-fit { flex: none; min-height: 0; }
 .sec-foot { display: block; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 .sec-foot .btn, .finish-actions .btn-primary { width: 100%; min-height: 48px; justify-content: center; }
+.room :is(.sec-foot, .finish-actions) .btn-primary {
+  --button-color: var(--prog-action, var(--prog, var(--action)));
+  background-color: var(--button-color);
+  border-color: var(--button-color);
+  color: white;
+}
+.room :is(.sec-foot, .finish-actions) .btn-primary:hover:not(:disabled) {
+  --button-color: color-mix(in srgb, var(--prog-action, var(--prog)) 87%, black);
+}
+.room :is(.sec-foot, .finish-actions) .btn-primary:active:not(:disabled) {
+  --button-color: color-mix(in srgb, var(--prog-action, var(--prog)) 74%, black);
+}
+.room :is(.sec-foot, .finish-actions) .btn-primary:focus-visible {
+  outline-color: var(--prog-action, var(--prog, var(--action)));
+  border-radius: var(--r-ctl);
+}
+.room :is(.sec-foot, .finish-actions) .btn-primary:disabled {
+  --button-color: color-mix(in srgb, var(--prog-action, var(--prog)) 65%, var(--ink));
+  opacity: 1;
+  border-color: white;
+  border-style: dashed;
+  cursor: not-allowed;
+}
 .section-save-status { margin: 0 0 8px; color: var(--warn); }
 .section-save-status:empty { display: none; }
 .room-sections summary { cursor: pointer; padding: 12px 0; }

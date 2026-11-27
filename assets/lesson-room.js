@@ -25,6 +25,26 @@ export function storyPreviewRoom({ id, name }) {
 
 function hostOf(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } }
 
+function accessibleActionColor(color) {
+  const hex = /^#[0-9a-f]{3}$/i.test(color) ? color.replace(/[0-9a-f]/gi, (digit) => digit.repeat(2)) : color;
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return 'var(--action)';
+  const rgb = hex.slice(1).match(/../g).map((channel) => parseInt(channel, 16));
+  const linear = (channel) => {
+    const value = channel / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = ([r, g, b]) => 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+  const max = 1.05 / 4.5 - 0.05;
+  if (luminance(rgb) <= max) return 'var(--prog)';
+
+  // Retain the hue and darken just enough for 4.5:1 contrast with white.
+  for (let percent = 99; percent > 0; percent -= 1) {
+    const darker = rgb.map((channel) => Math.floor(channel * percent / 100));
+    if (luminance(darker) <= max) return `rgb(${darker.join(', ')})`;
+  }
+  return 'var(--action)';
+}
+
 function notFound(teacher, previewId) {
   return {
     title: 'Not available',
@@ -368,7 +388,7 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
     title: finish ? `Finish: ${lesson.title}` : mat ? `${mat.title}, ${lesson.title}` : lesson.title,
     layout: 'full',
     html: html`
-      <div class="room" style="--prog:${course.color || '#1f4fd1'}">
+      <div class="room" style="--prog:${course.color || '#1f4fd1'};--prog-action:${accessibleActionColor(course.color || '#1f4fd1')}">
         <header class="room-bar">
           <a class="btn btn-sm room-back" aria-label="All lessons" href="#program-${course.id}">${icon('back')}<span>All lessons</span></a>
           <div class="room-prog" id="room-prog">${progressBlock()}</div>

@@ -384,7 +384,7 @@ function demoSeed(base, only) {
     ['Part 4 — Boyfriend', 'Part 4/boyfriend option', ['1-boyfriend-listening.html', '2-boyfriend-reading.html']],
     ['Part 4 — Car', 'Part 4/car option', ['1-car-discussion.html', '2-car-reading.html', '3-car-listening.html']],
   ];
-  const advent = { id: 'c-advent', title: 'Christmas Advent Calendar', emoji: '🎄', published: true, sort: 2, created_at: created };
+  const advent = { id: 'c-advent', title: 'Christmas Advent Calendar', emoji: '🎄', color: '#2b5342', published: true, sort: 2, created_at: created };
   const lessons = chapters.map(([title, path, files], sort) => ({
     id: 'l-advent-' + sort, title, course_id: advent.id, published: true, sort, created_at: created,
     materials: files.map((file, index) => ({
