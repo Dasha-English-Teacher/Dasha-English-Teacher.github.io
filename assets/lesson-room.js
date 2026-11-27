@@ -220,7 +220,7 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
       if (frameTools?.mode === 'graded' && !checked) {
         await frameTools.check();
         const result = tracker?.snapshot({ final: true });
-        if (result?.score == null) {
+        if (result?.score == null || (completion && !result.answers?.some((answer) => answer.a?.trim()))) {
           status('Answer the questions, then check your answers again.');
           return;
         }
@@ -232,6 +232,10 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
         if (frameTools?.validate?.() === false) { status('Complete the required answers before confirming your choice.'); return; }
         if (!mat.story.only) await save(true);
         await storyAction?.save();
+        return;
+      }
+      if (completion && frameTools?.validate?.() === false) {
+        status('Complete the required answers before continuing.');
         return;
       }
       if (!(mat.story?.only || (!tracker?.peek().interacted && idx.get(mat.id)?.done))) await save(true);
@@ -318,8 +322,8 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
       })}</ol>
       ${completion && !next ? html`<p class="notice">Complete all sections in this lesson to open the final chapter.</p>` : ''}
       ${teacher && !preview ? html`<p class="notice small">Students press this button at the end of a lesson. Their unfinished exercises are saved as they are, and you get one email with all the results.</p>` : ''}
-      ${!teacher && !sent && unopened.length ? html`<p class="notice notice-warn small">Not opened yet: ${unopened.map((m) => m.title).join(', ')}. You can go back to ${unopened.length === 1 ? 'it' : 'them'}, or finish now.</p>` : ''}
-      ${!teacher && !sent && pending.length ? html`<p class="notice small">Not finished yet: ${pending.map((m) => m.title).join(', ')}. ${pending.length === 1 ? 'It is' : 'They are'} sent as ${pending.length === 1 ? 'it is' : 'they are'}.</p>` : ''}
+      ${!teacher && !completion && !sent && unopened.length ? html`<p class="notice notice-warn small">Not opened yet: ${unopened.map((m) => m.title).join(', ')}. You can go back to ${unopened.length === 1 ? 'it' : 'them'}, or finish now.</p>` : ''}
+      ${!teacher && !completion && !sent && pending.length ? html`<p class="notice small">Not finished yet: ${pending.map((m) => m.title).join(', ')}. ${pending.length === 1 ? 'It is' : 'They are'} sent as ${pending.length === 1 ? 'it is' : 'they are'}.</p>` : ''}
       ${(!teacher || preview) && ending && !next ? html`<p class="notice">${ending.decision ? STORY_PENDING : html`<a href="#${route('play', ending.id)}">Choose what happens next to continue your story.</a>`}</p>` : ''}
       <div class="row-end finish-actions">
         <a class="btn" href="#program-${course.id}">All lessons</a>
