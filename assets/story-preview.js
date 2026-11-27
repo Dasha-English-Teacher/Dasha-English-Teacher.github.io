@@ -8,6 +8,15 @@ function readDecisions(teacherId, courseId) {
   return Array.isArray(stored) ? stored : [];
 }
 
+const completionKey = (teacherId, courseId) => key(teacherId, courseId) + ':completed';
+const completed = (teacherId, courseId) => new Set(JSON.parse(localStorage.getItem(completionKey(teacherId, courseId)) || '[]'));
+
+export function completePreviewSection(teacherId, courseId, materialId) {
+  const sections = completed(teacherId, courseId);
+  sections.add(materialId);
+  localStorage.setItem(completionKey(teacherId, courseId), JSON.stringify([...sections]));
+}
+
 export function hasStoryPreview(course) {
   return Object.keys(course?.story_rules || {}).length > 0;
 }
@@ -16,7 +25,7 @@ export function storyPreviewCourse(course, teacherId) {
   const decisions = readDecisions(teacherId, course.id);
   const preview = {
     ...course,
-    lessons: course.lessons.filter((lesson) => storyPathOpen(course, lesson, decisions))
+    lessons: course.lessons.filter((lesson) => storyPathOpen(course, lesson, decisions, completed(teacherId, course.id)))
       .map((lesson) => ({ ...lesson, materials: lesson.materials.map((material) => ({ ...material })) })),
   };
   return withStoryDecisions([preview], decisions)[0];
@@ -25,7 +34,7 @@ export function storyPreviewCourse(course, teacherId) {
 export function confirmPreviewDecision(course, teacherId, materialId, choice, predictions) {
   const decisions = readDecisions(teacherId, course.id);
   const source = course.lessons.find((lesson) => lesson.materials.some((material) => material.id === materialId));
-  if (!storyPathOpen(course, source, decisions) || !Object.hasOwn(course.story_rules?.[materialId]?.options || {}, choice)) {
+  if (!storyPathOpen(course, source, decisions, completed(teacherId, course.id)) || !Object.hasOwn(course.story_rules?.[materialId]?.options || {}, choice)) {
     throw new Error('This story choice is no longer available. Return to Student view and try again.');
   }
   const existing = decisions.find((decision) => decision.material_id === materialId);
@@ -37,6 +46,7 @@ export function confirmPreviewDecision(course, teacherId, materialId, choice, pr
 
 export function resetStoryPreview(teacherId, courseId) {
   localStorage.removeItem(key(teacherId, courseId));
+  localStorage.removeItem(completionKey(teacherId, courseId));
 }
 
 export function previewRoute(courseId, page, id) {

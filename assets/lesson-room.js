@@ -6,7 +6,7 @@ import { prepareExercise } from './exercise-frame.js';
 import { ask, html, icon, toast, nl2br, plural } from './ui.js';
 import { S, go, isTeacher, findLesson, findMaterial, progressIndex, sectionDone, lessonDone, courseStats, scoreText, scoreClass, teacherName, notifyTeacher, siteUrl, siteAddress, youtubeId, normUrl } from './core.js';
 import { bindStoryControls, storyDestination, STORY_INSTRUCTION, STORY_PENDING } from './story.js';
-import { confirmPreviewDecision, hasStoryPreview, previewRoute, storyPreviewCourse } from './story-preview.js';
+import { completePreviewSection, confirmPreviewDecision, hasStoryPreview, previewRoute, storyPreviewCourse } from './story-preview.js';
 import { createTracker } from './tracker.js';
 
 let finishRequest;
@@ -71,9 +71,12 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
   const mats = lesson.materials;
   const lessonNo = course.lessons.indexOf(lesson) + 1;
   const ending = lesson.materials.find((m) => m.story);
-  const nextLesson = () => (!teacher || preview) && ending
-    ? storyDestination(course, ending)
-    : course.lessons[course.lessons.findIndex((l) => l.id === lesson.id) + 1];
+  const completion = mats.map((m) => course.story_rules?.[m.id]?.complete).find(Boolean);
+  const nextLesson = () => {
+    if (completion) return course.lessons.find((l) => l.id === completion);
+    if ((!teacher || preview) && ending) return storyDestination(course, ending);
+    return course.lessons[course.lessons.findIndex((l) => l.id === lesson.id) + 1];
+  };
   let idx = progressIndex(attempts);
 
   // Which section to show: the one asked for, or the first one not done yet.
@@ -217,7 +220,7 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
       if (frameTools?.mode === 'graded' && !checked) {
         await frameTools.check();
         const result = tracker?.snapshot({ final: true });
-        if (result?.score == null) {
+        if (result?.score == null || (completion && !result.answers?.some((answer) => answer.a?.trim()))) {
           status('Answer the questions, then check your answers again.');
           return;
         }
@@ -231,8 +234,13 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
         await storyAction?.save();
         return;
       }
+      if (completion && frameTools?.validate?.() === false) {
+        status('Complete the required answers before continuing.');
+        return;
+      }
       if (!(mat.story?.only || (!tracker?.peek().interacted && idx.get(mat.id)?.done))) await save(true);
       if (!mounted || !sameAccount()) return;
+      if (preview && completion) completePreviewSection(studentId, course.id, mat.id);
       const next = nextSection();
       if (!next && !teacher) finishRequest = { studentId, lessonId: lesson.id };
       go(next ? route('play', next.id) : route('finish', lesson.id));
@@ -312,9 +320,10 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
         const p = teacher || m.story?.only ? null : idx.get(m.id);
         return html`<li class="${!teacher && sectionDone(m, idx) ? 'is-done' : p ? 'is-started' : ''}"><a href="#${route('play', m.id)}">${m.title}</a><span class="${p?.completed?.score != null ? `score ${scoreClass(p.completed)}` : 'muted small'}">${teacher ? '' : exerciseLine(m)}</span></li>`;
       })}</ol>
+      ${completion && !next ? html`<p class="notice">Complete all sections in this lesson to open the final chapter.</p>` : ''}
       ${teacher && !preview ? html`<p class="notice small">Students press this button at the end of a lesson. Their unfinished exercises are saved as they are, and you get one email with all the results.</p>` : ''}
-      ${!teacher && !sent && unopened.length ? html`<p class="notice notice-warn small">Not opened yet: ${unopened.map((m) => m.title).join(', ')}. You can go back to ${unopened.length === 1 ? 'it' : 'them'}, or finish now.</p>` : ''}
-      ${!teacher && !sent && pending.length ? html`<p class="notice small">Not finished yet: ${pending.map((m) => m.title).join(', ')}. ${pending.length === 1 ? 'It is' : 'They are'} sent as ${pending.length === 1 ? 'it is' : 'they are'}.</p>` : ''}
+      ${!teacher && !completion && !sent && unopened.length ? html`<p class="notice notice-warn small">Not opened yet: ${unopened.map((m) => m.title).join(', ')}. You can go back to ${unopened.length === 1 ? 'it' : 'them'}, or finish now.</p>` : ''}
+      ${!teacher && !completion && !sent && pending.length ? html`<p class="notice small">Not finished yet: ${pending.map((m) => m.title).join(', ')}. ${pending.length === 1 ? 'It is' : 'They are'} sent as ${pending.length === 1 ? 'it is' : 'they are'}.</p>` : ''}
       ${(!teacher || preview) && ending && !next ? html`<p class="notice">${ending.decision ? STORY_PENDING : html`<a href="#${route('play', ending.id)}">Choose what happens next to continue your story.</a>`}</p>` : ''}
       <div class="row-end finish-actions">
         <a class="btn" href="#program-${course.id}">All lessons</a>
@@ -332,8 +341,17 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
     try {
       const now = new Date().toISOString();
       // Exercises started (or started again) but not finished are sent as they are.
-      for (const a of mats.filter((m) => !m.story?.only).map(openAttempt).filter(Boolean)) await S.api.updateAttempt(a.id, { status: 'completed', finished_at: now });
+      for (const a of completion ? [] : mats.filter((m) => !m.story?.only).map(openAttempt).filter(Boolean)) await S.api.updateAttempt(a.id, { status: 'completed', finished_at: now });
       idx = progressIndex(await S.api.listAttempts({ student_id: S.me.id }));
+      if (completion) {
+        const updated = (await S.api.tree()).find((c) => c.id === course.id);
+        if (updated) course = updated;
+      }
+      if (completion && !mats.every((m) => sectionDone(m, idx))) {
+        const box = document.getElementById('room-main');
+        if (mounted && sameAccount() && box) box.innerHTML = finishHtml().toString();
+        return;
+      }
       let notified = false;
       if (S.settings.notify_on_finish !== false) {
         const lines = mats.map((m, k) => `${k + 1}. ${m.title}: ${exerciseLine(m)}`).join('\n');

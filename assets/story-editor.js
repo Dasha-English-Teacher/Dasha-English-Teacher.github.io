@@ -1,6 +1,6 @@
 import { S, refresh } from './core.js';
 import { ask, html, openModal, toast } from './ui.js';
-import { adventStoryRules, adventPartFiveRules } from './story.js';
+import { adventStoryRules, completeAdventRules } from './story.js';
 
 function validateRules(course, rules) {
   const sources = new Set();
@@ -9,21 +9,20 @@ function validateRules(course, rules) {
     const source = course.lessons.find((l) => l.materials.some((m) => m.id === section));
     if (!source || sources.has(source.id)) throw new Error('Choose one story decision section per lesson.');
     sources.add(source.id);
-    for (const { lesson } of Object.values(rule.options)) {
-      if (!lesson) continue;
-      if (!course.lessons.some((l) => l.id === lesson) || parents.has(lesson)) {
-        throw new Error('Assign each destination lesson to one choice in this program.');
+    const targets = rule.complete ? [rule.complete] : Object.values(rule.options).map((option) => option.lesson).filter(Boolean);
+    for (const lesson of targets) {
+      const incoming = parents.get(lesson) || [];
+      if (!course.lessons.some((l) => l.id === lesson) || (incoming.length && (!rule.complete || incoming.some((p) => !p.complete)))) {
+        throw new Error('Only completion links may share a destination in this program.');
       }
-      parents.set(lesson, source.id);
+      parents.set(lesson, [...incoming, { id: source.id, complete: !!rule.complete }]);
     }
   }
-  for (const target of parents.keys()) {
-    const seen = new Set();
-    for (let lesson = target; lesson; lesson = parents.get(lesson)) {
-      if (seen.has(lesson)) throw new Error('Choose destinations that do not loop back to earlier decisions.');
-      seen.add(lesson);
-    }
+  function checkForLoop(lesson, seen = []) {
+    if (seen.includes(lesson)) throw new Error('Choose destinations that do not loop back to earlier lessons.');
+    for (const parent of parents.get(lesson) || []) checkForLoop(parent.id, [...seen, lesson]);
   }
+  for (const target of parents.keys()) checkForLoop(target);
 }
 
 export function storyEditor(course, decisions, name) {
@@ -82,6 +81,32 @@ export function storyEditor(course, decisions, name) {
     });
   }
 
+  function completionDialog(sectionId = '') {
+    const rule = rules[sectionId];
+    const modal = openModal({
+      title: 'Open a lesson after completion',
+      body: html`<form class="form" data-submit="save">
+        <label>Complete this lesson<select name="section" required ${rule ? 'disabled' : ''}>
+          <option value="">Choose a lesson</option>
+          ${course.lessons.map((lesson) => {
+            const marker = lesson.materials.at(-1);
+            if (!marker || (lesson.materials.some((m) => rules[m.id]) && marker.id !== sectionId)) return '';
+            return html`<option value="${marker.id}" ${marker.id === sectionId ? 'selected' : ''}>${lesson.title}</option>`;
+          })}
+        </select></label>
+        <label>Open this lesson<select name="target" required>
+          <option value="">Choose a destination</option>
+          ${course.lessons.map((lesson) => html`<option value="${lesson.id}" ${lesson.id === rule?.complete ? 'selected' : ''}>${lesson.title}</option>`)}
+        </select></label>
+        <button class="btn btn-primary" type="submit">Save completion link</button>
+      </form>`,
+      submit: { async save(data) {
+        await save({ ...rules, [sectionId || data.section]: { ...rule, complete: data.target, options: {} } });
+        modal.close();
+      } },
+    });
+  }
+
   const studentsWithDecisions = [...new Set(decisions.map((d) => d.student_id))];
   return {
     html: html`<section>
@@ -90,15 +115,16 @@ export function storyEditor(course, decisions, name) {
           ${sections.some((m) => m.url?.includes('2_discuss.html')) && !Object.values(rules).some((r) => r.embedded)
             ? html`<button class="btn btn-sm" data-on="story-advent">Set up Advent branching</button>` : ''}
           ${sections.some((m) => /Christmas(?:%20| )advent\/Part(?:%20| )5\//i.test(m.url || ''))
-            ? html`<button class="btn btn-sm" data-on="story-advent-five">Connect Advent Part 5</button>` : ''}
+            ? html`<button class="btn btn-sm" data-on="story-advent-complete">Connect complete Advent story</button>` : ''}
           <button class="btn btn-sm" data-on="story-add">Add a story decision</button>
+          <button class="btn btn-sm" data-on="story-completion">Add a completion link</button>
         </div>
       </div>
       ${Object.entries(rules).map(([id, rule]) => html`<div class="notice">
         <strong>${sectionName(id)}</strong>
-        <ul>${Object.values(rule.options).map((option) => html`<li>${option.label} → ${lessonName(option.lesson)}</li>`)}</ul>
+        <ul>${rule.complete ? html`<li>After completing the lesson → ${lessonName(rule.complete)}</li>` : Object.values(rule.options).map((option) => html`<li>${option.label} → ${lessonName(option.lesson)}</li>`)}</ul>
         <div class="row-gap">
-          <button class="btn btn-sm" data-on="story-edit" data-id="${id}">Edit decision</button>
+          ${rule.complete ? html`<button class="btn btn-sm" data-on="story-completion" data-id="${id}">Edit completion link</button>` : html`<button class="btn btn-sm" data-on="story-edit" data-id="${id}">Edit decision</button>`}
           <button class="btn btn-sm" data-on="story-remove" data-id="${id}">Remove decision</button>
         </div>
       </div>`)}
@@ -115,23 +141,24 @@ export function storyEditor(course, decisions, name) {
     </section>`,
     on: {
       'story-add': () => dialog(),
+      'story-completion': (el) => completionDialog(el.dataset.id),
       'story-edit': (el) => dialog(el.dataset.id),
       async 'story-advent'() {
         const preset = adventStoryRules(course.lessons);
         if (Object.keys(preset).some((id) => rules[id])) throw new Error('Remove the existing rules for these sections before setting up Advent branching.');
         await save({ ...rules, ...preset });
       },
-      async 'story-advent-five'() {
+      async 'story-advent-complete'() {
         const latest = (await S.api.tree()).find((program) => program.id === course.id);
         if (!latest) throw new Error('This program is no longer available.');
-        const proposed = adventPartFiveRules(latest);
+        const proposed = completeAdventRules(latest);
         const modal = openModal({
-          title: 'Connect Advent Part 5',
+          title: 'Connect complete Advent story',
           body: html`<p>Review the destinations before saving. Confirmed choices stay in place.</p>
-            <ul>${Object.entries(proposed).flatMap(([id, rule]) => Object.entries(rule.options)
-              .filter(([key, option]) => latest.story_rules?.[id]?.options[key]?.lesson !== option.lesson)
-              .map(([, option]) => html`<li>${option.label} → ${lessonName(option.lesson)}</li>`))}</ul>
-            <p>Sports car keeps its current setting. New Part 5 decisions will show a coming-soon message.</p>
+            <ul>${Object.entries(proposed).flatMap(([id, rule]) => (rule.complete
+              ? [html`<li>${sectionName(id)} completed → ${lessonName(rule.complete)}</li>`]
+              : Object.values(rule.options).map((option) => html`<li>${option.label} → ${lessonName(option.lesson)}</li>`)))}</ul>
+            <p>The final chapter opens after the student completes their own Part 6 lesson.</p>
             <div class="row-end"><button class="btn" data-on="close">Cancel</button>
               <button class="btn btn-primary" data-on="apply">Save story decisions</button></div>`,
           on: { async apply() {

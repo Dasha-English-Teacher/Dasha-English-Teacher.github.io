@@ -47,10 +47,12 @@ Then build the page from these ready parts (class names from exercise.css):
 ### Spoken answers and story decisions
 
 - Add recording controls only for exercises that ask students to record a spoken answer. The Advent recorder uses HTTPS, detects a supported audio format, and offers playback and file download. Reuse its shared controls and verified teacher chat for Advent speaking tasks.
-- Use the shared recorder’s **Record your answer**, **Stop recording**, playback, **Download**, and **Send via WhatsApp** controls. On devices without file sharing, the WhatsApp action starts the download and opens the existing teacher chat for manual attachment.
-- Downloading and sharing are optional. Checking answers and confirming a story choice leave the recording alone. Warn only when leaving with an unsaved recording, and give students time to stop an active recording.
+- Use the shared recorder’s **Record your answer**, **Stop recording**, playback, **Record again**, **Download**, and **Send via WhatsApp** controls. On devices without file sharing, the WhatsApp action starts the download and opens the existing teacher chat for manual attachment.
+- Downloading and sharing are optional. Checking answers and confirming a story choice leave the recording alone. Warn only when leaving with an unsaved recording, and give students time to stop an active recording. Ask before replacing an unsaved recording.
 
 - A section that combines writing and a story choice keeps its written fields outside the `data-story-decision` container. Keep option wording and keys stable. Inside the decision, use `data-story-options`, `data-story-option`, `data-story-confirm` and `data-story-status`. Add the rule in the program editor with the same keys. Leave future destinations unset until the new chapter is ready.
+
+For Advent files, use the shared `advent.css` and the `advent-storybook` class on the body. Use `advent-hero` for decorative watercolor illustrations, with no fade over screenshots, instructional graphics or video. Keep writing areas cream with dark text and visible focus. Use **Add a completion link** for shared endings. Keep the link out of the embedded file so the program can check completion before opening the destination.
 
 ## 4. Size and layout
 - The page sits in a frame inside the lesson page. Do not use `height: 100vh`, `position: fixed` or full-screen layouts. Let the page scroll normally.

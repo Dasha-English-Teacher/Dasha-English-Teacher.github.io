@@ -421,6 +421,9 @@ export function createDemoApi(cfg) {
   const authCbs = [];
   const fire = (ev) => authCbs.forEach((cb) => cb(ev));
 
+  const completedSections = () => new Set(db.attempts.filter((a) =>
+    a.student_id === meRow()?.id && a.status === 'completed').map((a) => a.material_id));
+
   const canSeeCourse = (c) => {
     const me = meRow();
     if (!me) return false;
@@ -504,7 +507,7 @@ export function createDemoApi(cfg) {
       const decisions = db.story_decisions.filter((d) => d.student_id === meRow()?.id);
       const courses = db.courses.filter(canSeeCourse).map((c) => {
         const course = fullCourse(c);
-        if (!teacher) course.lessons = course.lessons.filter((l) => storyPathOpen(course, l, decisions));
+        if (!teacher) course.lessons = course.lessons.filter((l) => storyPathOpen(course, l, decisions, completedSections()));
         return course;
       });
       return withStoryDecisions(sortTree(clone(courses)), decisions);
@@ -520,7 +523,7 @@ export function createDemoApi(cfg) {
       const course = fullCourse(base);
       const decisions = db.story_decisions.filter((d) => d.student_id === student_id);
       const source = course.lessons.find((l) => l.materials.some((m) => m.id === material_id));
-      need(storyPathOpen(course, source, decisions) && Object.hasOwn(course.story_rules?.[material_id]?.options || {}, choice));
+      need(storyPathOpen(course, source, decisions, completedSections()) && Object.hasOwn(course.story_rules?.[material_id]?.options || {}, choice));
       const existing = decisions.find((d) => d.course_id === course_id && d.material_id === material_id);
       if (existing) return wait(existing);
       const decision = { course_id, material_id, student_id, choice, predictions: clone(predictions), confirmed_at: nowIso() };
@@ -584,7 +587,7 @@ export function createDemoApi(cfg) {
       if (!isTeacher() && o.material_id) {
         const lesson = db.lessons.find((l) => l.id === db.materials.find((m) => m.id === o.material_id)?.lesson_id);
         const base = db.courses.find((c) => c.id === lesson?.course_id);
-        need(base && canSeeCourse(base) && storyPathOpen(fullCourse(base), lesson, db.story_decisions.filter((d) => d.student_id === me.id)));
+        need(base && canSeeCourse(base) && storyPathOpen(fullCourse(base), lesson, db.story_decisions.filter((d) => d.student_id === me.id), completedSections()));
       }
       const row = { id: id('a'), student_id: me.id, status: 'in_progress', score: null, max_score: null, first_score: null, first_max: null, revealed: false, answers: [], seconds: 0, started_at: nowIso(), finished_at: null, feedback: null, feedback_at: null, feedback_seen: false, reviewed: false, ...pick(o, FIELDS.attempts) };
       if (!isTeacher()) { row.feedback = null; row.reviewed = false; }
