@@ -787,6 +787,7 @@ input.is-readonly { background: var(--paper); color: var(--ink-2); }
 .sec-title { min-width: 0; overflow-wrap: anywhere; }
 
 @media (max-width: 760px) {
+  .room-bar .btn, .room-bar .icon-btn { min-width: 48px; min-height: 48px; }
   .room-bar { position: static; padding-inline: max(10px, env(safe-area-inset-left)) max(10px, env(safe-area-inset-right)); }
   .room-body { display: flex; flex-direction: column; gap: 8px; padding: 6px; }
   .room-main, .room-side { width: 100%; min-width: 0; }

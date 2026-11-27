@@ -23,6 +23,7 @@ export function prepareExercise(doc, frame, onEdit) {
     audio, img, video, textarea { max-width: 100%; }
     textarea, input:not([type=radio]):not([type=checkbox]), select { font-size: max(16px, 1em); }
     @media (max-width: 480px) {
+      button, select, summary, label.choice { min-height: 48px; }
       audio { min-width: 0; }
     }
   `;
