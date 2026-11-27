@@ -44,6 +44,12 @@ Then build the page from these ready parts (class names from exercise.css):
 - Reading or listening with no questions uses **Continue**. Keep playback controls, transcripts and educational feedback accessible.
 - Use the program editor to add story decisions. Keep story controls distinct from grading and never save choices or written work in exercise browser storage.
 
+### Spoken answers and story decisions
+
+- Add recording controls only for exercises that ask students to record a spoken answer. The Advent recorder uses HTTPS, detects a supported audio format, and offers playback and file download. Reuse its shared controls and verified teacher chat for Advent speaking tasks.
+- Ask the student to select WhatsApp in the device’s share menu and finish sending there. When audio sharing is unavailable, offer download and the existing teacher chat so the student can attach the file. Keep the recording available until the student can download it, share it or explicitly continue.
+- A section that combines writing and a story choice keeps its written fields outside the `data-story-decision` container. Keep option wording and keys stable. Inside the decision, use `data-story-options`, `data-story-option`, `data-story-confirm` and `data-story-status`. Add the rule in the program editor with the same keys. Leave future destinations unset until the new chapter is ready.
+
 ## 4. Size and layout
 - The page sits in a frame inside the lesson page. Do not use `height: 100vh`, `position: fixed` or full-screen layouts. Let the page scroll normally.
 - Must work on phones from 320px wide: no sideways scrolling, key buttons at least 48px high, text in fields at least 16px.

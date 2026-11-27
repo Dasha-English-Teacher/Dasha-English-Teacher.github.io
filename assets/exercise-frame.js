@@ -42,6 +42,7 @@ export function prepareExercise(doc, frame, onEdit) {
   const written = !!doc.querySelector('textarea, [contenteditable=true], input:not([type]), input[type=text]');
   return {
     mode: declared || (check ? 'graded' : written ? 'written' : 'passive'),
+    validate: () => doc.querySelector('[required]:invalid')?.reportValidity() ?? true,
     async check() {
       check?.click();
       // Give reportResult's queued message time to deliver its richer answer list.

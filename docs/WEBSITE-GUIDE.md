@@ -278,6 +278,12 @@ The bottom action uses the colour selected in **Programs → Edit → Settings �
 
 Same-site exercises can declare a type with `data-lesson-mode` on the body. Give the grading button `data-lesson-check` and mark duplicate standalone navigation or submission controls with `data-lesson-standalone`. Leave recording, playback, answer keys and educational feedback visible. Standalone pages keep their controls. External frames retain their own interface and can report results through `report.js` when supported.
 
+### Spoken recordings and WhatsApp
+
+Advent Part 3 **Discuss** and Part 5 **Clara prettier → Let’s continue** have spoken recording tasks. Students can record, stop, play and download the audio. **Send to teacher via WhatsApp** opens the device’s file-sharing menu when the browser supports audio files. Choose WhatsApp and the teacher’s chat there. If the menu is unavailable, download the audio, open the teacher’s existing WhatsApp chat from the recording controls, and attach the file manually. The lesson does not send the file or verify delivery.
+
+Recordings stay in the exercise tab until it closes. Download or share the recording before moving on, or choose **Continue without sharing**. If microphone access is declined, allow access in the browser settings and try again. The controls detect a format supported by the browser. Passive listening keeps its existing audio player.
+
 ### How the website reads results
 `assets/tracker.js` watches the exercise in the frame:
 1. Best: the exercise calls `reportResult(score, total, answers)` (from `assets/report.js`). This works even from another address.
@@ -294,6 +300,33 @@ Open **Programs → Edit → Story decisions**. Each decision belongs to a secti
 1. Keep the existing Part 3 and Part 4 lessons and section URLs. The two Part 4 folders need separate lessons in the same program as Part 3. If either lesson is missing, use **New lesson from a GitHub folder** to add it.
 2. Click **Set up Advent branching** once in the program editor. The preset matches the existing exercise URLs, connects Part 3 to the boyfriend and car lessons, and adds both Part 4 decisions with their original choices. Publish the Part 4 lessons so students can open their selected route.
 3. When Part 5 is ready, add its lessons as drafts. Open **Edit decision** on the two Part 4 rules and assign the destination for each existing choice. Publish the new lessons after saving the rules. Leave a destination as **Next chapter coming soon** until it is ready. Students who already confirmed that choice can open the lesson as soon as it is published.
+
+#### Connect Advent Part 5
+
+The three Part 5 lessons already exist in the live program. Keep their existing lesson and section IDs. For a separate copy of the program, import each of these GitHub folders as a separate draft lesson using **New lesson from a GitHub folder**. Make sure both HTML files are in the lesson and the file starting with `1-` comes first.
+
+- `Christmas advent/Part 5/Big house`
+- `Christmas advent/Part 5/Clara prettier`
+- `Christmas advent/Part 5/Handsome boyfriend`
+
+After both website and exercise changes are published, open the Advent program editor and select **Connect Advent Part 5**. Review the proposed rules and click **Save story decisions**. The update preserves Part 3 and the saved Part 4 choice keys. In a copy with draft lessons, publish the destination lessons only after saving the rules.
+
+| Existing Part 4 section | Confirmed choice | Destination |
+|---|---|---|
+| Car listening | Version 2 — Big house | Part 5: Big house |
+| Car listening | Version 1 — Sports car | Next chapter coming soon |
+| Boyfriend reading | I wish I were prettier. | Part 5: Clara prettier |
+| Boyfriend reading | I wish my boyfriend were more handsome and had more money. | Part 5: Handsome boyfriend |
+
+The setup also adds a decision for the final section of each Part 5 route. Written reflections are saved separately from the story choice. All six Part 6 destinations start as **Next chapter coming soon**.
+
+| Part 5 section | Existing choice wording |
+|---|---|
+| Big house — Messages and next wish | I want a NEW house. / I want to live with a beautiful view. |
+| Clara prettier — The next wish | I want to speak Spanish. / I want my old body to be prettier. |
+| Handsome boyfriend — The next wish | I want just one handsome boyfriend. / I don’t want boyfriends; I want a handsome rich husband. |
+
+When Part 6 is ready, use **Edit decision** on each relevant Part 5 section to attach its draft destination before publishing. Confirmed choices follow the newly assigned destination automatically.
 
 #### Add a decision to another chapter
 

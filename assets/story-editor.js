@@ -1,6 +1,6 @@
 import { S, refresh } from './core.js';
 import { ask, html, openModal, toast } from './ui.js';
-import { adventStoryRules } from './story.js';
+import { adventStoryRules, adventPartFiveRules } from './story.js';
 
 function validateRules(course, rules) {
   const sources = new Set();
@@ -89,6 +89,8 @@ export function storyEditor(course, decisions, name) {
         <div class="row-gap">
           ${sections.some((m) => m.url?.includes('2_discuss.html')) && !Object.values(rules).some((r) => r.embedded)
             ? html`<button class="btn btn-sm" data-on="story-advent">Set up Advent branching</button>` : ''}
+          ${sections.some((m) => /Christmas(?:%20| )advent\/Part(?:%20| )5\//i.test(m.url || ''))
+            ? html`<button class="btn btn-sm" data-on="story-advent-five">Connect Advent Part 5</button>` : ''}
           <button class="btn btn-sm" data-on="story-add">Add a story decision</button>
         </div>
       </div>
@@ -118,6 +120,29 @@ export function storyEditor(course, decisions, name) {
         const preset = adventStoryRules(course.lessons);
         if (Object.keys(preset).some((id) => rules[id])) throw new Error('Remove the existing rules for these sections before setting up Advent branching.');
         await save({ ...rules, ...preset });
+      },
+      async 'story-advent-five'() {
+        const latest = (await S.api.tree()).find((program) => program.id === course.id);
+        if (!latest) throw new Error('This program is no longer available.');
+        const proposed = adventPartFiveRules(latest);
+        const modal = openModal({
+          title: 'Connect Advent Part 5',
+          body: html`<p>Review the destinations before saving. Confirmed choices stay in place.</p>
+            <ul>${Object.entries(proposed).flatMap(([id, rule]) => Object.entries(rule.options)
+              .filter(([key, option]) => latest.story_rules?.[id]?.options[key]?.lesson !== option.lesson)
+              .map(([, option]) => html`<li>${option.label} → ${lessonName(option.lesson)}</li>`))}</ul>
+            <p>Sports car keeps its current setting. New Part 5 decisions will show a coming-soon message.</p>
+            <div class="row-end"><button class="btn" data-on="close">Cancel</button>
+              <button class="btn btn-primary" data-on="apply">Save story decisions</button></div>`,
+          on: { async apply() {
+            const current = (await S.api.tree()).find((program) => program.id === course.id);
+            if (JSON.stringify(current?.story_rules) !== JSON.stringify(latest.story_rules)) {
+              throw new Error('Story decisions changed. Close this preview and review the latest version.');
+            }
+            await save(proposed);
+            modal.close();
+          } },
+        });
       },
       async 'story-remove'(el) {
         if (!(await ask('Remove this story decision?', { ok: 'Remove decision', detail: 'Its destination lessons will become visible based on their published status.' }))) return;

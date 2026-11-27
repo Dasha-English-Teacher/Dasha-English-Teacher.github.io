@@ -205,8 +205,16 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
       || (label === 'Continue my story' && !storyAction?.ready);
   }
 
+  const recordingPending = () => !!document.getElementById('exercise-frame')?.contentDocument?.querySelector('[data-recording-pending]');
+  function keepRecording() {
+    if (!recordingPending()) return false;
+    status('Stop recording, then download or share it. You can also continue without sharing from the recording controls.');
+    return true;
+  }
+
   async function advanceSection() {
     if (busy) return;
+    if (!(frameTools?.mode === 'graded' && !checked) && keepRecording()) return;
     busy = true;
     paintAction();
     try {
@@ -223,6 +231,7 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
         return;
       }
       if (mat.story && !mat.decision) {
+        if (frameTools?.validate?.() === false) { status('Complete the required answers before confirming your choice.'); return; }
         if (!mat.story.only) await save(true);
         await storyAction?.save();
         return;
@@ -246,7 +255,7 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
   </footer>`;
 
   function warnUnsaved(event) {
-    if (!teacher && revision !== savedRevision) {
+    if (recordingPending() || (!teacher && revision !== savedRevision)) {
       event.preventDefault();
       event.returnValue = '';
     }
@@ -257,7 +266,7 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
     const head = html`<header class="sec-head"><div class="sec-title"><h1>${mat.title}</h1></div></header>`;
     let body = '';
     if (mat.kind === 'exercise') {
-      body = html`<iframe id="exercise-frame" class="sec-frame" src="${siteAddress(mat.url)}" title="${mat.title}" allow="autoplay; clipboard-write; fullscreen; microphone 'self'"></iframe>`;
+      body = html`<iframe id="exercise-frame" class="sec-frame" src="${siteAddress(mat.url)}" title="${mat.title}" allow="autoplay; clipboard-write; fullscreen; microphone 'self'; web-share 'self'"></iframe>`;
     } else if (mat.kind === 'video') {
       const vid = youtubeId(mat.url);
       body = vid
@@ -511,7 +520,9 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
       }
     },
     async beforeLeave() {
-      if (teacher || !sameAccount()) return;
+      if (!sameAccount()) return;
+      if (keepRecording()) return false;
+      if (teacher) return;
       clearTimeout(saveTimer);
       try {
         do { await save(); } while (revision !== savedRevision);

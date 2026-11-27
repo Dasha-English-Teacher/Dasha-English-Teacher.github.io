@@ -138,9 +138,9 @@ const ADVENT = [
   }],
 ];
 
-export function adventStoryRules(lessons) {
+function adventSections(lessons) {
   const sections = lessons.flatMap((lesson) => lesson.materials.map((m) => ({ ...m, lesson: lesson.id })));
-  const find = (path) => {
+  return (path) => {
     const suffix = '/miro-exercises/Christmas advent/' + path;
     const matches = sections.filter((m) => {
       try { return decodeURIComponent(new URL(m.url, 'https://dashaenglish.com').pathname) === suffix; }
@@ -149,10 +149,56 @@ export function adventStoryRules(lessons) {
     if (matches.length !== 1) throw new Error('Add exactly one section for ' + path + ' before setting up Advent branching.');
     return matches[0];
   };
+}
+
+export function adventStoryRules(lessons) {
+  const find = adventSections(lessons);
   return Object.fromEntries(ADVENT.map(([path, only, options]) => [
     find(path).id,
     { only, embedded: true, options: Object.fromEntries(Object.entries(options).map(([key, [label, target]]) => [
       key, { label, lesson: target ? find(target).lesson : null },
     ])) },
   ]));
+}
+
+
+const PART_FIVE = [
+  ['Big house', '2-messages-and-next-wish.html', 'Part 4/car option/3-car-listening.html', 'big-house', {
+    'new-house': 'I want a NEW house.',
+    'beautiful-view': 'I want to live with a beautiful view.',
+  }],
+  ['Clara prettier', '2-the-next-wish.html', 'Part 4/boyfriend option/2-boyfriend-reading.html', 'prettier', {
+    'know-spanish': 'I want to speak Spanish.',
+    'old-body': 'I want my old body to be prettier.',
+  }],
+  ['Handsome boyfriend', '2-the-next-wish.html', 'Part 4/boyfriend option/2-boyfriend-reading.html', 'boyfriend', {
+    'one-boyfriend': 'I want just one handsome boyfriend.',
+    husband: 'I don’t want boyfriends; I want a handsome rich husband.',
+  }],
+];
+
+export function adventPartFiveRules(course) {
+  const find = adventSections(course.lessons);
+  const rules = { ...course.story_rules };
+  for (const [folder, lastFile, previous, choice, endings] of PART_FIVE) {
+    const first = find(`Part 5/${folder}/1-lets-continue.html`);
+    const last = find(`Part 5/${folder}/${lastFile}`);
+    if (first.lesson !== last.lesson) throw new Error('Import both sections for ' + folder + ' into the same lesson.');
+    const source = find(previous).id;
+    const previousRule = rules[source];
+    const option = previousRule?.options[choice];
+    if (!option) throw new Error('Set up the existing Part 4 story decisions first.');
+    if (option.lesson && option.lesson !== first.lesson) throw new Error('Review the existing destination for ' + option.label);
+    rules[source] = { ...previousRule, options: { ...previousRule.options, [choice]: { ...option, lesson: first.lesson } } };
+    const existing = rules[last.id];
+    if (existing && (!existing.embedded || existing.only || Object.keys(existing.options).length !== Object.keys(endings).length
+      || Object.entries(endings).some(([key, label]) => existing.options[key]?.label !== label))) {
+      throw new Error('Review the existing story decision for ' + folder + ' before connecting Part 5.');
+    }
+    if (!existing) rules[last.id] = {
+      only: false, embedded: true,
+      options: Object.fromEntries(Object.entries(endings).map(([key, label]) => [key, { label, lesson: null }])),
+    };
+  }
+  return rules;
 }
