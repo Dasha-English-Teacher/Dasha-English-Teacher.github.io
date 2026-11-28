@@ -1,3 +1,4 @@
+import { nextSort } from './program-management.js';
 // Exercise library: Dasha's HTML exercises on GitHub, grouped by folder.
 // A folder can become a lesson in one step: every file in it becomes a
 // section, in the order of the file names (1-intro.html, 2-match-up.html, ...).
@@ -30,16 +31,18 @@ async function addFiles(lesson, files) {
   await Promise.all(files.map((x, i) => S.api.saveMaterial({ lesson_id: lesson.id, kind: 'exercise', title: sectionTitle(x), url: x.url, body: '', sort: start + i })));
 }
 
-export async function createLessonFromFolder(course, group, title) {
-  const lesson = await S.api.saveLesson({ course_id: course.id, title, description: '', published: true, sort: course.lessons.length });
-  await addFiles({ id: lesson.id, materials: [] }, group.items);
-  return lesson;
+export async function createLessonFromFolder(course, group, title, module = null) {
+  const module_id = module?.id || null;
+  const sort = nextSort(course.lessons.filter((l) => (l.module_id || null) === module_id));
+  const lesson = { course_id: course.id, module_id, title, description: '', published: true, sort };
+  const sections = group.items.map((x, sort) => ({ kind: 'exercise', title: sectionTitle(x), url: x.url, body: '', sort }));
+  return S.api.importLesson(lesson, sections);
 }
 
 const fileList = (files) => html`<ol class="folder-preview">${files.map((x) => html`<li><strong>${sectionTitle(x)}</strong> <span class="muted small">${x.file.split('/').pop()}</span></li>`)}</ol>`;
 
 // New lesson from a folder. With a program: the lesson goes there. Without: choose one.
-export async function lessonFromFolderDialog({ course = null, tree = null, group = null } = {}) {
+export async function lessonFromFolderDialog({ course = null, tree = null, group = null, module = null } = {}) {
   tree = tree || (await S.api.tree());
   const lib = await loadLibrary();
   const groups = groupFolders(lib.items).filter((g) => g.items.length);
@@ -50,7 +53,7 @@ export async function lessonFromFolderDialog({ course = null, tree = null, group
   const many = manyRepos(groups);
   let chosen = group ? groups.find((g) => g.key === group.key) || group : groups.find((g) => g.folder) || groups[0];
   const body = () => html`<form class="form" data-submit="create">
-    ${course ? html`<p class="muted">The lesson is added at the end of <strong>${course.title}</strong>.</p>`
+    ${course ? html`<p class="muted">The lesson is added at the end of <strong>${module?.title || course.title}</strong>.</p>`
       : html`<label>Program<select name="course" required>${tree.map((c) => html`<option value="${c.id}">${c.title}</option>`)}</select></label>`}
     <label>Folder on GitHub<select name="folder" data-change="folder">${groups.map((g) => html`<option value="${g.key}" ${g.key === chosen.key ? 'selected' : ''}>${folderLabel(g, many)} (${plural(g.items.length, 'file')})</option>`)}</select></label>
     <label>Lesson title<input name="title" required maxlength="200" value="${folderTitle(chosen)}"></label>
@@ -75,7 +78,7 @@ export async function lessonFromFolderDialog({ course = null, tree = null, group
       async create(d) {
         const target = course || tree.find((c) => c.id === d.course);
         if (!target) { toast('Choose a program.', 'error'); return; }
-        await createLessonFromFolder(target, chosen, d.title.trim());
+        await createLessonFromFolder(target, chosen, d.title.trim(), module);
         m.close();
         toast(`Lesson "${d.title.trim()}" created with ${plural(chosen.items.length, 'section')}`);
         if (course) refresh(); else go(`edit-program-${target.id}`);

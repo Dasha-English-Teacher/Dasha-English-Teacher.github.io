@@ -30,7 +30,7 @@ Contents
 - **Exercises** are Dasha's HTML files on GitHub. The website opens them inside the lesson, reads the score and the answers, and saves them.
 
 Words used everywhere (keep them the same in the website, emails and this guide):
-**Program** → **Lesson** → **Section**. A section is an *exercise* (HTML file), a *video*, a *link* or a *reading* (text). In the database a program is a `course` and a section is a `material` (old names, do not rename the tables).
+**Program** → **Lesson** → **Section**, or **Program** → **Module** → **Lesson** → **Section**. A section is an *exercise* (HTML file), a *video*, a *link* or a *reading* (text). In the database a program is a `course` and a section is a `material` (old names, do not rename the tables).
 
 ## 2. Accounts and services
 
@@ -148,7 +148,7 @@ miro-exercises/
 Plain HTML, CSS and JavaScript modules. **No build step, no npm, no frameworks**: GitHub Pages serves the files exactly as they are, and the browser runs them. The only outside library is the Supabase client, loaded from a CDN in `api.js`.
 
 ### Pages (routes)
-Addresses are `#name` or `#name-id`, for example `#program-<id>`, `#lesson-<id>`, `#play-<sectionId>`, `#finish-<lessonId>`, `#student-<id>`.
+Addresses are `#name` or `#name-id`, for example `#program-<id>`, `#module-<id>`, `#lesson-<id>`, `#play-<sectionId>`, `#finish-<lessonId>`, `#student-<id>`.
 `ROUTES` in `app.js` lists which pages each role may open (`public`, `waiting`, `student`, `teacher`); `NAV` builds the side menu; `FULL_PAGE` lists pages without the menu (the lesson pages); `ALIASES` keeps old addresses working (`#class-…` → `#program-…`).
 
 ### A page ("view")
@@ -177,7 +177,7 @@ export async function exampleView({ id }) {
 - Every database call goes through `S.api`. Both versions (live and demo) must have the same functions.
 - `FIELDS` lists the columns that may be saved for each table. A new column must be added here, or it is silently not saved.
 - `DEFAULT_SETTINGS` holds every *Website* setting with its default value.
-- Demo mode: sample students, programs and results in `demoSeed()`, kept in the browser's localStorage under `english-studio-demo-v3`. If the shape of the demo data changes (for example a new table), add it to `demoSeed()` and increment the key version so old demo data is replaced.
+- Demo mode: sample students, programs and results in `demoSeed()`, kept in the browser's localStorage under `english-studio-demo-v4`. If the shape of the demo data changes (for example a new table), add it to `demoSeed()` and increment the key version so old demo data is replaced.
 
 ### Words and style in the interface
 Plain, short English; sentence case; the action word on buttons ("Save changes", "Add a section"), and the same word in the message afterwards ("Section added"). Use Program / Lesson / Section / Exercise consistently. Error messages say what to do.
@@ -224,9 +224,13 @@ Balance of a student = all `payments` − all `held_lessons` prices. Marking a c
 - A student who signs up alone waits as `pending` on *Requests* until Dasha approves. A student who signs up from an invitation link is `active` at once and gets the invited programs.
 - Email confirmation is off. Site URL and redirect URLs are set under *Authentication → URL Configuration* (`https://dashaenglish.com`, `https://dashaenglish.com/**`).
 
+The `course_modules` table stores optional groups and `lessons.module_id` links lessons to a group in the same program. The `enrollments.access_mode` column defaults to `full`. The `lesson_assignments` table stores each selected lesson and its optional release time or prerequisite, linked to the student's enrollment and the lesson's program.
+
 ### Security (Row Level Security)
 Every table has RLS on. In short: students read only their own rows and the programs they are enrolled in (and only when the program, lesson and their account are active/published); only the teacher writes programs, prices, payments, settings and feedback. Helper functions: `is_teacher()`, `can_see_course()`, `can_see_lesson()`. Triggers `protect_profile` and `protect_attempt` stop students from changing their role, status, price or the teacher's feedback.
 **Never turn RLS off, and never use the service_role key in the website.**
+
+Lesson and section access uses the same database check for the student dashboard, direct links, attempts and story decisions. Scheduled or waiting lessons expose only their dashboard information to the assigned student. Existing attempts remain readable after access is removed. Students can still acknowledge feedback. The authenticated learning platform enforces access to its records. Exercise files published on GitHub Pages are public.
 
 ### Changing the database safely
 1. Write the change as SQL that is safe to run twice: `create table if not exists`, `alter table … add column if not exists`, `create or replace function`, `drop policy if exists` before `create policy`, `drop trigger if exists` before `create trigger`.
@@ -254,6 +258,26 @@ All emails use one layout (`email_layout()` in `schema.sql`); the sender is the 
 **"Forgot password" emails** are sent by Supabase Auth through Resend SMTP (section 2).
 
 ## 9. Lessons and exercises
+
+### Organise lessons in modules
+
+Open **Programs → Edit → Add module**. Give the module a title, optional description, icon and colour. Search the same icon picker used for program settings, or enter your own emoji. Publish when the module is ready. Each lesson keeps its own publication setting.
+
+- Open the module in the editor to add a lesson, import a GitHub folder or assign all its current lessons. Use the arrows to reorder modules and the lessons within each module. **Move to module** can move a lesson into another module or back to **Ungrouped lessons** without changing its exercises or results.
+- **Unpublish** hides the module and its lessons. **Remove module** moves its lessons to **Ungrouped lessons**, where their own publication settings apply. Move or unpublish individual lessons first if they should stay hidden.
+- Students open modules from the program page. Ungrouped lessons stay on the program page. Programs without modules open directly to their lessons.
+
+### Open lessons for individual students
+
+1. Open **Students → Student → Programs and homework → Manage access**. New and existing enrollments start with **Full access**. Students receive published lessons as they become available.
+2. Choose **Selected lessons**, then use search, the module groups, or the lesson checkboxes. The switch starts with currently available lessons checked. Choose **Save access**, review the lessons that will remain and those you are removing, then confirm. Newly published lessons need a separate assignment in this mode.
+3. To open more lessons, check them and choose **Save access**. To remove access, uncheck the lesson. The student's results, answers, scores and feedback stay in their history and count in progress again when access is restored.
+4. In the program editor, **Assign to students** on a lesson or module adds assignments to one or more selected-access students. A module assignment includes the lessons currently inside it. Existing assignments keep their release settings. Full-access enrollments stay Full access.
+5. Choose **Open now**, **Schedule release**, or **After completion**. For a date, pick the time zone shown in the dialog. It is remembered in that browser and dates are stored as UTC instants. Choose another time if daylight saving skips or repeats it. For a prerequisite, assign that lesson first unless the student already completed it. Use **Edit release** in Manage access to change an existing assignment.
+
+The program and each module show the student's personal progress. Published assigned lessons count even while scheduled or waiting for a prerequisite. Completion uses the lesson's exercises, or all sections for lessons without exercises. A prerequisite uses that same rule. Confirmed story decisions and Advent's seven-lesson progress continue to use the existing route rules. Story programs use Full access so students can finish their route.
+
+A lesson used as a prerequisite must have its dependent release rules changed before deletion. Clear individual assignments and prerequisite references before moving a lesson to a different program. Moving it between modules in the same program keeps its assignments.
 
 ### How Dasha adds a lesson
 1. Make the exercises (ChatGPT, following `exercise-kit/CHATGPT-INSTRUCTIONS.md`). Name the files with numbers: `1-intro.html`, `2-match-up.html`…
@@ -452,6 +476,14 @@ There is one teacher account by design. If ever needed: Supabase → *Table Edit
 - **Safer way:** changes as a pull request (Codex makes one). Dasha reads the description, then *Merge*. A merged pull request has a *Revert* button if something goes wrong.
 - **Undo a direct change:** GitHub → the file → *History* → open the older version → copy it → edit the current file → paste → *Commit changes*.
 - A test student account (another email of Dasha's) is useful to check what students see on the real website.
+
+### Deploy program management after review
+
+1. Review the migration and PR. Test locally with `?demo` and run `node tests/advent-program-management.mjs` with Node.js 22 or later. On a disposable Supabase database, apply `supabase/schema.sql` and run `psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/program_management.sql`. The SQL test creates local sample records in a transaction and rolls them back.
+2. Before production deployment, take a database backup and export **courses**, **lessons**, **materials**, **enrollments**, **attempts** and **story_decisions** to CSV from the Supabase Table Editor. On a repeat deployment, also export **course_modules** and **lesson_assignments** if they already exist. Store the files privately. The backup protects related content, results and choice history.
+3. In the production **Supabase → SQL Editor → New query**, paste and run the entire [program management migration](../supabase/migrations/20261127234949_program_management.sql). Keep the website PR unmerged until SQL Editor reports success. In the Table Editor confirm that existing enrollments show `full`, existing lesson IDs are present and their module fields are empty on the first deployment, and both new tables have RLS enabled.
+4. Merge the reviewed PR into `main` and wait for GitHub Pages to finish deployment. Open dashaenglish.com in a fresh browser tab. In teacher Student view, check Advent and an existing program without modules. Try the new module and assignment controls in `?demo` or with agreed test accounts.
+5. If the website needs a rollback, revert the website PR and leave the migration and its data in place. Access rules continue to apply in the database, even while the older website is deployed. Restore previous access or publication settings only after reviewing their effect on students.
 
 ## 12. When something goes wrong
 

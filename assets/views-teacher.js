@@ -1,3 +1,4 @@
+import { COLORS, colorPicker, iconPicker, iconPickerEvents, moduleDialog, moveToModule, nextSort, manageLessonAccess, assignToStudents } from './program-management.js';
 import { storyEditor } from './story-editor.js';
 // Teacher pages: today, students, programs, library, results, calendar, requests, website settings.
 import { html, raw, icon, toast, openModal, ask, copyText, nl2br, fmtDate, fmtDateLong, fmtTime, fmtDateTime, fmtDay, timeAgo, duration, plural, initials, sameDay, startOfWeek, addDays, startOfDay, dateInput, timeInput, setTimeFormat, esc } from './ui.js';
@@ -8,8 +9,6 @@ import { libraryView, lessonFromFolderDialog, flagMissingFiles, pickerList, grou
 
 const STATUS_LABEL = { active: 'Active', pending: 'Waiting for approval', paused: 'Paused', archived: 'Archived' };
 const SESSION_WORD = { scheduled: 'planned', done: 'held', missed: 'missed', cancelled: 'cancelled' };
-const EMOJIS = ['📘', '✍️', '🌿', '🗣️', '🎧', '🎬', '🧠', '💼', '✈️', '📈', '⭐', '☕'];
-const COLORS = ['#1f4fd1', '#1e8a5a', '#c2410c', '#7c3aed', '#0e7490', '#be185d', '#a16207', '#334155', '#2b5342'];
 
 const nameOf = (profiles) => {
   const m = new Map(profiles.map((p) => [p.id, p.full_name || p.email || 'Student']));
@@ -332,6 +331,8 @@ export async function studentView({ id }) {
   ]);
   if (!p) return { title: 'Not found', html: html`<div class="empty"><h1>Student not found</h1><p><a href="#students">Back to students</a></p></div>` };
   const enrolled = new Set(enrollments.filter((e) => e.student_id === id).map((e) => e.course_id));
+  const catalogs = new Map(await Promise.all(tree.filter((c) => enrolled.has(c.id) && !Object.keys(c.story_rules || {}).length)
+    .map(async (c) => [c.id, (await S.api.lessonCatalog(c.id, id)).filter((l) => l.state !== 'hidden' && l.state !== 'unassigned')])));
   const idx = progressIndex(attempts);
   const upcoming = sessions.filter((s) => new Date(s.starts_at) > new Date() && s.status === 'scheduled');
   const hw = homeworkStats(id, tree, enrollments, attempts);
@@ -364,9 +365,10 @@ export async function studentView({ id }) {
           </section>
           <section><h2 class="section-title">Programs and homework</h2>
             ${tree.length ? html`<ul class="check-list">${tree.map((c) => {
-              const st = courseStats(c, idx);
+              const catalog = catalogs.get(c.id);
+              const st = catalog ? { done: catalog.filter((l) => l.completed).length, total: catalog.length } : courseStats(c, idx);
               return html`<li><label class="check"><input type="checkbox" data-change="enroll" value="${c.id}" ${enrolled.has(c.id) ? 'checked' : ''}> ${c.title}</label>
-                ${enrolled.has(c.id) ? html`<span class="muted small">${st.done} of ${st.total} lessons done</span>` : ''}</li>`;
+                ${enrolled.has(c.id) ? html`<div class="row-gap access-program-actions"><span class="muted small">${st.done} of ${st.total} lessons done</span><button type="button" class="btn btn-sm" data-on="manage-access" data-id="${c.id}">Manage access</button></div>` : ''}</li>`;
             })}</ul>
             ${hw.lessons ? html`<p class="small hw-line">${plural(hw.exDone, 'exercise')} done${hw.avg != null ? html`, average score <span class="score ${hw.avg >= 85 ? 'good' : hw.avg >= 60 ? 'fair' : 'low'}">${hw.avg}%</span>` : ''}.</p>` : ''}`
             : html`<p class="muted">No programs yet. <a href="#programs">Create a program</a></p>`}
@@ -406,7 +408,15 @@ export async function studentView({ id }) {
       </div>`,
     change: {
       async status(el) { await S.api.updateProfile(id, { status: el.value }); toast('Status changed'); refresh(); },
-      async enroll(el) { await S.api.setEnrollment(el.value, id, el.checked); toast(el.checked ? 'Program opened for this student' : 'Program closed for this student'); },
+      async enroll(el) {
+        if (!el.checked && !(await ask('Remove program access?', { ok: 'Remove access', detail: 'The lesson assignments in this program will be cleared. Results and feedback will stay in the student’s history.' }))) {
+          el.checked = true;
+          return;
+        }
+        await S.api.setEnrollment(el.value, id, el.checked);
+        toast(el.checked ? 'Program opened for this student' : 'Program closed for this student');
+        refresh();
+      },
     },
     input: {
       notes(el) {
@@ -429,6 +439,7 @@ export async function studentView({ id }) {
       },
     },
     on: {
+      'manage-access': (el) => manageLessonAccess(tree.find((c) => c.id === el.dataset.id), id),
       async approve() { await S.api.updateProfile(id, { status: 'active' }); toast('Approved. Now open some programs for this student.'); refresh(); },
       schedule: () => scheduleDialog({ studentId: id }),
       pay: () => paymentDialog({ profiles, studentId: id }),
@@ -480,13 +491,13 @@ function programDialog(course = null) {
       <label>Description <span class="opt">optional</span><textarea name="description" rows="2" maxlength="1000">${c.description}</textarea></label>
       <div class="grid-2"><label>Level <span class="opt">optional</span><input name="level" value="${c.level}" maxlength="40" placeholder="B2"></label>
         <label class="check check-top"><input type="checkbox" name="published" ${c.published ? 'checked' : ''}> Visible to its students</label></div>
-      <fieldset><legend>Icon</legend><div class="swatches">${EMOJIS.map((e) => html`<label class="swatch"><input type="radio" name="emoji" value="${e}" ${e === c.emoji ? 'checked' : ''}><span>${e}</span></label>`)}</div></fieldset>
-      <fieldset><legend>Colour</legend><div class="swatches">${COLORS.map((col) => html`<label class="swatch"><input type="radio" name="color" value="${col}" ${col === c.color?.toLowerCase() ? 'checked' : ''}><span style="background:${col}" aria-label="${col}"></span></label>`)}</div></fieldset>
+      ${iconPicker(c.emoji)}${colorPicker(c.color)}
       <div class="row-end"><button class="btn" type="button" data-on="close">Cancel</button><button class="btn btn-primary" type="submit">${course ? 'Save changes' : 'Create program'}</button></div>
     </form>`,
+    ...iconPickerEvents,
     submit: {
       async save(d) {
-        const row = await S.api.saveCourse({ id: course?.id, title: d.title.trim(), description: d.description.trim(), level: d.level.trim(), published: d.published, emoji: d.emoji || '📘', color: d.color || COLORS[0], ...(course ? {} : { sort: Date.now() % 100000 }) });
+        const row = await S.api.saveCourse({ id: course?.id, title: d.title.trim(), description: d.description.trim(), level: d.level.trim(), published: d.published, emoji: d.emoji.trim() || '📘', color: d.color || COLORS[0], ...(course ? {} : { sort: Date.now() % 100000 }) });
         m.close();
         invalidateNav();
         toast(course ? 'Program saved' : 'Program created');
@@ -504,11 +515,15 @@ async function reorder(list, i, dir, saveFn) {
   await Promise.all(arr.map((x, k) => (x.sort !== k ? saveFn({ id: x.id, sort: k }) : null)));
 }
 
+const openProgramModules = new Map();
+
 export async function editProgramView({ id }) {
   const [tree, profiles, enrollments] = await Promise.all([S.api.tree(), S.api.listProfiles(), S.api.listEnrollments()]);
   const course = tree.find((c) => c.id === id);
   if (!course) return { title: 'Not found', html: html`<div class="empty"><h1>Program not found</h1><p><a href="#programs">Back to programs</a></p></div>` };
   const name = nameOf(profiles);
+  const expanded = openProgramModules.get(id);
+  let editorRoot;
   const inProgram = enrollments.filter((e) => e.course_id === id).map((e) => e.student_id);
 
   const rules = course.story_rules || {};
@@ -524,18 +539,34 @@ export async function editProgramView({ id }) {
     if (rules[material.id]) throw new Error('Remove the story decision before moving or deleting this section.');
   };
 
-  const lessonBlock = (l, i) => html`<li class="ed-lesson">
+  const groupLessons = (module) => course.lessons.filter((l) => (l.module_id || null) === module);
+  const moduleById = (el) => course.course_modules.find((m) => m.id === el.dataset.id);
+  const moveOrder = async (rows, index, offset, group, modules) => {
+    const ids = rows.map((row) => row.id);
+    const other = index + offset;
+    if (other < 0 || other >= ids.length) return;
+    [ids[index], ids[other]] = [ids[other], ids[index]];
+    await S.api.reorderProgram(id, group, ids, modules);
+    refresh();
+  };
+  const lessonBlock = (l, rank, group) => {
+    const i = course.lessons.indexOf(l);
+    return html`<li class="ed-lesson">
     <div class="ed-lesson-head">
-      <span class="margin-num">${i + 1}</span>
+      <span class="margin-num">${rank + 1}</span>
       <div class="ed-title"><h3>${l.title}</h3>${l.published ? '' : html`<span class="chip chip-pending">Draft, hidden</span>`}${l.description ? html`<p class="muted small">${l.description}</p>` : ''}<p class="muted small">${plural(l.materials.length, 'section')}</p></div>
       <div class="ed-tools">
         <a class="icon-btn" href="#lesson-${l.id}" aria-label="Open the lesson as students see it" title="Open as students see it">${icon('eye')}</a>
-        <button class="icon-btn" data-on="lesson-up" data-i="${i}" aria-label="Move lesson up" title="Move up" ${i === 0 ? 'disabled' : ''}>${icon('up')}</button>
-        <button class="icon-btn" data-on="lesson-down" data-i="${i}" aria-label="Move lesson down" title="Move down" ${i === course.lessons.length - 1 ? 'disabled' : ''}>${icon('down')}</button>
+        <button class="icon-btn" data-on="lesson-up" data-i="${i}" aria-label="Move lesson up" title="Move up" ${rank === 0 ? 'disabled' : ''}>${icon('up')}</button>
+        <button class="icon-btn" data-on="lesson-down" data-i="${i}" aria-label="Move lesson down" title="Move down" ${rank === group.length - 1 ? 'disabled' : ''}>${icon('down')}</button>
         <button class="icon-btn" data-on="lesson-move" data-i="${i}" aria-label="Move or copy to another program" title="Move or copy to another program">${icon('move')}</button>
         <button class="icon-btn" data-on="lesson-edit" data-i="${i}" aria-label="Edit lesson" title="Edit">${icon('edit')}</button>
         <button class="icon-btn" data-on="lesson-del" data-i="${i}" aria-label="Delete lesson" title="Delete">${icon('trash')}</button>
       </div>
+    </div>
+    <div class="row-gap program-lesson-actions">
+      ${course.course_modules.length ? html`<button class="btn btn-sm" data-on="move-module" data-i="${i}">Move to module</button>` : ''}
+      <button class="btn btn-sm" data-on="assign-lesson" data-i="${i}">Assign to students</button>
     </div>
     <ul class="ed-materials">${l.materials.map((mat, k) => html`<li ${mat.kind === 'exercise' && mat.url ? html`data-check-url="${mat.url}"` : ''}>
       <span class="ed-num">${k + 1}</span>${kindIcon(mat.kind)}<div class="ed-mat-main"><span>${mat.title}</span>${mat.url ? html`<span class="muted small ellipsis">${shortUrl(mat.url)}</span>` : ''}</div>
@@ -550,6 +581,11 @@ export async function editProgramView({ id }) {
       <li class="ed-add"><button class="btn btn-sm" data-on="mat-add" data-i="${i}">${icon('plus')} Add a section</button><span class="muted small">an exercise from GitHub, a video, a link or a text</span></li>
     </ul>
   </li>`;
+  };
+  const lessonList = (group) => {
+    const lessons = groupLessons(group);
+    return lessons.length ? html`<ol class="ed-lessons">${lessons.map(lessonBlock)}</ol>` : html`<p class="muted small">No lessons yet.</p>`;
+  };
 
   return {
     title: course.title,
@@ -566,9 +602,26 @@ export async function editProgramView({ id }) {
       </section>
 
       <section><div class="row-between"><h2 class="section-title">Lessons</h2>
-          <div class="row-gap"><button class="btn btn-sm" data-on="lesson-folder">${icon('folder')} New lesson from a GitHub folder</button><button class="btn btn-sm btn-primary" data-on="lesson-add">${icon('plus')} Add a lesson</button></div></div>
-        <p class="muted small">Each lesson has sections. Students see them listed beside the lesson and go through them one by one.</p>
-        ${course.lessons.length ? html`<ol class="ed-lessons">${course.lessons.map(lessonBlock)}</ol>` : html`<p class="muted">No lessons yet. Add the first lesson, then put exercises in it.</p>`}
+        <div class="row-gap"><button class="btn btn-sm" data-on="module-add">${icon('plus')} Add module</button></div></div>
+        ${course.course_modules.map((m, index) => html`<details class="program-module-editor" data-module-id="${m.id}" ${(expanded ? expanded.has(m.id) : index === 0) ? 'open' : ''}>
+          <summary>${m.emoji} ${m.title} <span class="muted small">· ${m.published ? 'Published' : 'Draft'} · ${plural(groupLessons(m.id).length, 'lesson')}</span></summary>
+          <div class="row-gap module-tools">
+            <button class="btn btn-sm" data-on="module-edit" data-id="${m.id}">Edit module</button>
+            <button class="btn btn-sm" data-on="module-publish" data-id="${m.id}">${m.published ? 'Unpublish' : 'Publish'}</button>
+            <button class="icon-btn" data-on="module-up" data-id="${m.id}" aria-label="Move module up" ${index === 0 ? 'disabled' : ''}>${icon('up')}</button>
+            <button class="icon-btn" data-on="module-down" data-id="${m.id}" aria-label="Move module down" ${index === course.course_modules.length - 1 ? 'disabled' : ''}>${icon('down')}</button>
+            <button class="btn btn-sm" data-on="module-assign" data-id="${m.id}">Assign to students</button>
+            <button class="btn btn-sm" data-on="module-delete" data-id="${m.id}">Remove module</button>
+          </div>
+          <div class="row-gap module-tools">
+            <button class="btn btn-sm btn-primary" data-on="lesson-add" data-id="${m.id}">${icon('plus')} Add lesson to module</button>
+            <button class="btn btn-sm" data-on="lesson-folder" data-id="${m.id}">${icon('folder')} Import GitHub folder</button>
+          </div>
+          ${lessonList(m.id)}
+        </details>`)}
+        ${course.course_modules.length ? html`<h3>Ungrouped lessons</h3>` : ''}
+        <div class="row-gap module-tools"><button class="btn btn-sm" data-on="lesson-folder">${icon('folder')} New lesson from a GitHub folder</button><button class="btn btn-sm btn-primary" data-on="lesson-add">${icon('plus')} Add a lesson</button></div>
+        ${lessonList(null)}
       </section>
       ${branching.html}
       <p class="danger-zone"><button class="btn btn-ghost btn-danger-text" data-on="delete">${icon('trash')} Delete this program</button></p>`,
@@ -591,8 +644,25 @@ export async function editProgramView({ id }) {
         });
       },
       async unenroll(el) { await S.api.setEnrollment(id, el.dataset.id, false); toast('Removed from program'); refresh(); },
-      'lesson-add': () => lessonDialog(course),
-      'lesson-folder': () => lessonFromFolderDialog({ course, tree }),
+      'module-add': () => moduleDialog(course),
+      'module-edit': (el) => moduleDialog(course, moduleById(el)),
+      async 'module-publish'(el) {
+        const m = moduleById(el);
+        if (m.published && !(await ask(`Unpublish "${m.title}"?`, { ok: 'Unpublish', detail: 'Students will lose access to the lessons in this module while it is hidden.' }))) return;
+        await S.api.saveModule({ id: m.id, published: !m.published }); refresh();
+      },
+      async 'module-delete'(el) {
+        const m = moduleById(el);
+        if (!(await ask(`Remove "${m.title}"?`, { ok: 'Remove module', detail: 'Its lessons move to Ungrouped lessons. Their own publication settings still apply.' }))) return;
+        await S.api.deleteModule(m.id); refresh();
+      },
+      'module-up': (el) => moveOrder(course.course_modules, course.course_modules.indexOf(moduleById(el)), -1, null, true),
+      'module-down': (el) => moveOrder(course.course_modules, course.course_modules.indexOf(moduleById(el)), 1, null, true),
+      'module-assign': (el) => assignToStudents(course, groupLessons(el.dataset.id), profiles, enrollments),
+      'assign-lesson': (el) => assignToStudents(course, [course.lessons[+el.dataset.i]], profiles, enrollments),
+      'move-module': (el) => moveToModule(course, course.lessons[+el.dataset.i]),
+      'lesson-add': (el) => lessonDialog(course, null, moduleById(el)),
+      'lesson-folder': (el) => lessonFromFolderDialog({ course, tree, module: moduleById(el) }),
       'lesson-edit': (el) => lessonDialog(course, course.lessons[+el.dataset.i]),
       'lesson-move': (el) => { const lesson = course.lessons[+el.dataset.i]; checkLesson(lesson); lessonMoveDialog(tree, course, lesson); },
       async 'lesson-del'(el) {
@@ -601,8 +671,18 @@ export async function editProgramView({ id }) {
         if (!(await ask(`Delete lesson "${l.title}"?`, { ok: 'Delete lesson', danger: true, detail: 'Its sections are removed from the program. The files stay on GitHub, and student results stay in Results.' }))) return;
         await S.api.deleteLesson(l.id); refresh();
       },
-      async 'lesson-up'(el) { await reorder(course.lessons, +el.dataset.i, -1, S.api.saveLesson); refresh(); },
-      async 'lesson-down'(el) { await reorder(course.lessons, +el.dataset.i, 1, S.api.saveLesson); refresh(); },
+      'lesson-up': (el) => {
+        const lesson = course.lessons[+el.dataset.i];
+        const group = lesson.module_id || null;
+        const rows = groupLessons(group);
+        return moveOrder(rows, rows.indexOf(lesson), -1, group, false);
+      },
+      'lesson-down': (el) => {
+        const lesson = course.lessons[+el.dataset.i];
+        const group = lesson.module_id || null;
+        const rows = groupLessons(group);
+        return moveOrder(rows, rows.indexOf(lesson), 1, group, false);
+      },
       async 'mat-up'(el) { await reorder(course.lessons[+el.dataset.i].materials, +el.dataset.k, -1, S.api.saveMaterial); refresh(); },
       async 'mat-down'(el) { await reorder(course.lessons[+el.dataset.i].materials, +el.dataset.k, 1, S.api.saveMaterial); refresh(); },
       'mat-move': (el) => { const l = course.lessons[+el.dataset.i]; const mat = l.materials[+el.dataset.k]; checkMaterial(mat); materialMoveDialog(tree, l, mat); },
@@ -615,7 +695,11 @@ export async function editProgramView({ id }) {
         await S.api.deleteMaterial(mat.id); refresh();
       },
     },
-    mount() { flagMissingFiles().catch(() => {}); },
+    mount(root) { editorRoot = root; flagMissingFiles().catch(() => {}); },
+    unmount() {
+      if (editorRoot) openProgramModules.set(id,
+        new Set([...editorRoot.querySelectorAll('.program-module-editor[open]')].map((el) => el.dataset.moduleId)));
+    },
   };
 }
 
@@ -642,10 +726,10 @@ function lessonMoveDialog(tree, course, lesson) {
         if (!target) return;
         if (d.how === 'move') {
           if (target.id === course.id) { toast('The lesson is already in this program.', 'error'); return; }
-          await S.api.saveLesson({ id: lesson.id, course_id: target.id, sort: target.lessons.length });
+          await S.api.saveLesson({ id: lesson.id, course_id: target.id, module_id: null, sort: nextSort(target.lessons.filter((l) => !l.module_id)) });
           toast(`Moved to "${target.title}"`);
         } else {
-          await S.api.copyLesson(lesson, target.id, target.lessons.length);
+          await S.api.copyLesson(lesson, target.id, nextSort(target.lessons.filter((l) => !l.module_id)));
           toast(`Copied to "${target.title}"`);
         }
         m.close(); refresh();
@@ -683,9 +767,9 @@ function materialMoveDialog(tree, lesson, mat) { // a section
   });
 }
 
-function lessonDialog(course, lesson = null) {
+function lessonDialog(course, lesson = null, module = null) {
   const m = openModal({
-    title: lesson ? 'Edit lesson' : 'New lesson',
+    title: lesson ? 'Edit lesson' : module ? `New lesson in ${module.title}` : 'New lesson',
     body: html`<form class="form" data-submit="save">
       <label>Title<input name="title" value="${lesson?.title || ''}" required maxlength="200" placeholder="For example: Talking about plans"></label>
       <label>Description <span class="opt">optional</span><textarea name="description" rows="2" maxlength="1000">${lesson?.description || ''}</textarea></label>
@@ -693,7 +777,7 @@ function lessonDialog(course, lesson = null) {
       <div class="row-end"><button class="btn" type="button" data-on="close">Cancel</button><button class="btn btn-primary" type="submit">${lesson ? 'Save' : 'Add lesson'}</button></div></form>`,
     submit: {
       async save(d) {
-        await S.api.saveLesson({ id: lesson?.id, course_id: course.id, title: d.title.trim(), description: d.description.trim(), published: d.published, ...(lesson ? {} : { sort: course.lessons.length }) });
+        await S.api.saveLesson({ id: lesson?.id, course_id: course.id, title: d.title.trim(), description: d.description.trim(), published: d.published, ...(lesson ? {} : { module_id: module?.id || null, sort: nextSort(course.lessons.filter((l) => (l.module_id || null) === (module?.id || null))) }) });
         m.close(); toast(lesson ? 'Lesson saved' : 'Lesson added'); refresh();
       },
     },

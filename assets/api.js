@@ -1,4 +1,4 @@
-import { adventStoryRules, storyPathOpen, withStoryDecisions } from './story.js';
+import { completeAdventRules, storyPathOpen, withStoryDecisions } from './story.js';
 
 // Data layer. Two interchangeable versions with the same functions:
 //  - live: Supabase (real accounts, data stored online)
@@ -48,7 +48,8 @@ const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefin
 const FIELDS = {
   profiles: ['full_name', 'role', 'status', 'level', 'phone', 'goals', 'lesson_price', 'email_notifications', 'timezone'],
   courses: ['story_rules', 'title', 'description', 'emoji', 'color', 'level', 'published', 'sort'],
-  lessons: ['course_id', 'title', 'description', 'published', 'sort'],
+  course_modules: ['course_id', 'title', 'description', 'emoji', 'color', 'published', 'sort'],
+  lessons: ['course_id', 'module_id', 'title', 'description', 'published', 'sort'],
   materials: ['lesson_id', 'kind', 'title', 'url', 'body', 'sort'],
   attempts: ['material_id', 'material_title', 'status', 'score', 'max_score', 'first_score', 'first_max', 'revealed', 'answers', 'seconds', 'finished_at', 'feedback', 'feedback_at', 'feedback_seen', 'reviewed'],
   sessions: ['student_id', 'title', 'starts_at', 'minutes', 'meeting_url', 'note', 'status'],
@@ -65,6 +66,7 @@ const ATTEMPT_STATS = 'id,student_id,material_id,material_title,status,score,max
 export function sortTree(courses) {
   courses.sort((a, b) => (a.sort - b.sort) || String(a.created_at).localeCompare(String(b.created_at)));
   for (const c of courses) {
+    c.course_modules = (c.course_modules || []).sort((a, b) => (a.sort - b.sort) || String(a.created_at).localeCompare(String(b.created_at)));
     c.lessons = (c.lessons || []).sort((a, b) => (a.sort - b.sort) || String(a.created_at).localeCompare(String(b.created_at)));
     for (const l of c.lessons) l.materials = (l.materials || []).sort((a, b) => (a.sort - b.sort) || String(a.created_at).localeCompare(String(b.created_at)));
   }
@@ -149,7 +151,7 @@ export async function createLiveApi(cfg) {
     deleteInvite: (id) => remove('invites', id),
 
     async tree() {
-      const rows = await run(sb.from('courses').select('*, lessons(*, materials(*))').order('sort'));
+      const rows = await run(sb.from('courses').select('*, course_modules(*), lessons(*, materials(*))').order('sort'));
       const courses = sortTree(rows || []);
       if (me?.role === 'teacher' || !courses.some((c) => Object.keys(c.story_rules || {}).length)) return withStoryDecisions(courses, []);
       const decisions = await run(sb.from('story_decisions').select('*').eq('student_id', me.id));
@@ -166,6 +168,15 @@ export async function createLiveApi(cfg) {
     resetStoryDecisions: (course_id, student_id) => run(sb.from('story_decisions').delete().eq('course_id', course_id).eq('student_id', student_id)),
     saveCourse: (o) => save('courses', o),
     deleteCourse: (id) => remove('courses', id),
+    lessonCatalog: (course, student) => run(sb.rpc('lesson_catalog', { p_course: course, p_student: student })),
+    changeLessonAccess: ({ course, students, add = [], remove = [], expected = null, mode = null, at = null, prerequisite = null, replace = false }) =>
+      run(sb.rpc('change_lesson_access', { p_course: course, p_students: students, p_add: add, p_remove: remove,
+        p_expected: expected, p_mode: mode, p_available_at: at, p_prerequisite: prerequisite, p_replace_release: replace })),
+    saveModule: (o) => save('course_modules', o),
+    deleteModule: (id) => remove('course_modules', id),
+    importLesson: (lesson, materials) => run(sb.rpc('import_program_lesson', { p_lesson: lesson, p_materials: materials })),
+    reorderProgram: (course, group, ids, modules = false) =>
+      run(sb.rpc('reorder_program_items', { p_course: course, p_module: group, p_ids: ids, p_modules: modules })),
     saveLesson: (o) => save('lessons', o),
     deleteLesson: (id) => remove('lessons', id),
     saveMaterial: (o) => save('materials', o),
@@ -254,7 +265,7 @@ export async function createLiveApi(cfg) {
 // =====================================================================
 // DEMO (sample data in this browser)
 // =====================================================================
-const DEMO_KEY = 'english-studio-demo-v3';
+const DEMO_KEY = 'english-studio-demo-v4';
 
 export const DEMO_EXERCISES = [
   'Tamila_Part_1_Multiple_Choice.html',
@@ -298,6 +309,14 @@ function demoSeed(base, only) {
       { id: 'h-5', student_id: S2, session_id: null, lesson_id: 'l-impostor', held_on: at(-9, 10, 30), minutes: 45, price: 5000, title: 'Vocabulary lesson', note: '', status: 'held', created_at: iso(now - 9 * day) },
     ],
     story_decisions: [],
+    course_modules: [
+      { id: 'mod-mind', course_id: 'c-burnout', title: 'Understanding yourself', description: 'Find the words to describe how you feel at work.', emoji: '🧠', color: '#7c3aed', published: true, sort: 0, created_at: created },
+      { id: 'mod-review', course_id: 'c-burnout', title: 'Practice and review', description: '', emoji: '📝', color: '#1e8a5a', published: false, sort: 1, created_at: created },
+    ],
+    lesson_assignments: [
+      { course_id: 'c-burnout', student_id: S2, lesson_id: 'l-impostor' },
+      { course_id: 'c-burnout', student_id: S2, lesson_id: 'l-burnout', available_at: iso(now + day) },
+    ],
     courses: [
       { id: 'c-grammar', title: 'C1 grammar with Tamila', description: 'Contrast linkers, comparatives and combining ideas in writing.', emoji: '✍️', color: '#1f4fd1', level: 'C1', published: true, sort: 0, created_at: created },
       { id: 'c-burnout', title: 'Burnout and well-being vocabulary', description: 'Words and expressions for talking about stress, impostor syndrome and healthy work habits.', emoji: '🌿', color: '#1e8a5a', level: 'B2–C1', published: true, sort: 1, created_at: created },
@@ -305,9 +324,9 @@ function demoSeed(base, only) {
     lessons: [
       { id: 'l-contrast', course_id: 'c-grammar', title: 'Contrast and comparatives', description: 'Although, despite, whereas, nevertheless and the more…, the more…', published: true, sort: 0, created_at: created },
       { id: 'l-writing', course_id: 'c-grammar', title: 'Combining ideas in writing', description: 'Write 16 sentences and send them for feedback.', published: true, sort: 1, created_at: created },
-      { id: 'l-impostor', course_id: 'c-burnout', title: 'Impostor syndrome', description: 'Key vocabulary from the article we read in class.', published: true, sort: 0, created_at: created },
+      { id: 'l-impostor', course_id: 'c-burnout', module_id: 'mod-mind', title: 'Impostor syndrome', description: 'Key vocabulary from the article we read in class.', published: true, sort: 0, created_at: created },
       { id: 'l-burnout', course_id: 'c-burnout', title: 'Burnout and sustainable productivity', description: '', published: true, sort: 1, created_at: created },
-      { id: 'l-review', course_id: 'c-burnout', title: 'Review before the test', description: 'Coming soon.', published: false, sort: 2, created_at: created },
+      { id: 'l-review', course_id: 'c-burnout', module_id: 'mod-review', title: 'Review before the test', description: 'Coming soon.', published: false, sort: 2, created_at: created },
     ],
     materials: [
       { id: 'm-t1', lesson_id: 'l-contrast', kind: 'exercise', title: 'Choose the best option', url: ex(DEMO_EXERCISES[0]), body: '', sort: 0, created_at: created },
@@ -322,7 +341,7 @@ function demoSeed(base, only) {
     enrollments: [
       { course_id: 'c-grammar', student_id: S1, created_at: created },
       { course_id: 'c-burnout', student_id: S1, created_at: created },
-      { course_id: 'c-burnout', student_id: S2, created_at: created },
+      { course_id: 'c-burnout', student_id: S2, access_mode: 'selected', created_at: created },
     ],
     attempts: [
       {
@@ -380,9 +399,19 @@ function demoSeed(base, only) {
     db.attempts = db.attempts.filter((a) => db.materials.some((m) => m.id === a.material_id));
   }
   const chapters = [
+    ['Part 1', 'Part 1', ['1_index.html', '2_post.html', '3_audio.html']],
+    ['Part 2', 'Part 2', ['1_index.html', '2_discuss.html', '3_audio.html']],
     ['Part 3', 'Part 3', ['1_index.html', '2_discuss.html']],
     ['Part 4 — Boyfriend', 'Part 4/boyfriend option', ['1-boyfriend-listening.html', '2-boyfriend-reading.html']],
     ['Part 4 — Car', 'Part 4/car option', ['1-car-discussion.html', '2-car-reading.html', '3-car-listening.html']],
+    ...['Big house', 'Clara prettier', 'Handsome boyfriend', 'Sportcar'].map((folder) => [
+      'Part 5 — ' + folder, 'Part 5/' + folder, ['1-lets-continue.html', folder === 'Big house' ? '2-messages-and-next-wish.html' : '2-the-next-wish.html'],
+    ]),
+    ...['New house option', 'Beautiful view option', '2 cars option', 'drivable car option', 'know spanish option',
+      'Old body option', 'One boyfriend option', 'Husband option'].map((folder) => [
+      'Part 6 — ' + folder, 'Part 6/' + folder, ['1-lets-continue.html', '2-the-final-wish.html'],
+    ]),
+    ['Part 7 — Finale', 'Part 7', ['1-the-unwrapping.html', '2-thank-you.html']],
   ];
   const advent = { id: 'c-advent', title: 'Christmas Advent Calendar', emoji: '🎄', color: '#2b5342', published: true, sort: 2, created_at: created };
   const lessons = chapters.map(([title, path, files], sort) => ({
@@ -394,7 +423,7 @@ function demoSeed(base, only) {
     })),
   }));
   if (!only) {
-    advent.story_rules = adventStoryRules(lessons);
+    advent.story_rules = completeAdventRules({ ...advent, lessons });
     db.courses.push(advent);
     db.lessons.push(...lessons.map(({ materials, ...lesson }) => lesson));
     db.materials.push(...lessons.flatMap((l) => l.materials));
@@ -431,12 +460,40 @@ export function createDemoApi(cfg) {
     return c.published && me.status === 'active' && db.enrollments.some((e) => e.course_id === c.id && e.student_id === me.id);
   };
 
+  const enrollmentFor = (course, student) => db.enrollments.find((e) => e.course_id === course && e.student_id === student);
+  const published = (l) => l?.published && (!l.module_id || db.course_modules.some((m) => m.id === l.module_id && m.published));
+  const complete = (lesson, student) => {
+    const all = db.materials.filter((m) => m.lesson_id === lesson);
+    const exercises = all.filter((m) => m.kind === 'exercise');
+    return all.length > 0 && (exercises.length ? exercises : all).every((m) =>
+      db.attempts.some((a) => a.student_id === student && a.material_id === m.id && a.status === 'completed'));
+  };
+  const releaseState = (a, student) => {
+    if (a?.available_at && Date.parse(a.available_at) > Date.now()) return 'scheduled';
+    if (a?.prerequisite_lesson_id && !complete(a.prerequisite_lesson_id, student)) return 'waiting';
+    return 'available';
+  };
+
   const fullCourse = (c) => ({
     ...c,
+    course_modules: db.course_modules.filter((m) => m.course_id === c.id),
     lessons: db.lessons.filter((l) => l.course_id === c.id).map((l) => ({
       ...l, materials: db.materials.filter((m) => m.lesson_id === l.id),
     })),
   });
+
+  const storyAllows = (course, lesson, decisions) => {
+    const visible = { ...course, lessons: course.lessons.filter(published) };
+    return published(lesson) && storyPathOpen(visible, lesson, decisions, completedSections());
+  };
+  const canOpen = (course, lesson, decisions) => {
+    const student = meRow()?.id;
+    if (!storyAllows(course, lesson, decisions)) return false;
+    if (enrollmentFor(course.id, student)?.access_mode !== 'selected') return true;
+    if (Object.keys(course.story_rules || {}).length) return false;
+    const assignment = db.lesson_assignments.find((a) => a.student_id === student && a.lesson_id === lesson.id);
+    return !!assignment && releaseState(assignment, student) === 'available';
+  };
 
   function upsert(list, o, prefix, fields) {
     if (o.id) {
@@ -507,7 +564,14 @@ export function createDemoApi(cfg) {
       const decisions = db.story_decisions.filter((d) => d.student_id === meRow()?.id);
       const courses = db.courses.filter(canSeeCourse).map((c) => {
         const course = fullCourse(c);
-        if (!teacher) course.lessons = course.lessons.filter((l) => storyPathOpen(course, l, decisions, completedSections()));
+        if (!teacher) {
+          const student = meRow().id;
+          const selected = enrollmentFor(c.id, student)?.access_mode === 'selected';
+          course.course_modules = course.course_modules.filter((m) => m.published && (!selected ||
+            course.lessons.some((l) => l.module_id === m.id && published(l) &&
+              db.lesson_assignments.some((a) => a.student_id === student && a.lesson_id === l.id))));
+          course.lessons = course.lessons.filter((l) => canOpen(course, l, decisions));
+        }
         return course;
       });
       return withStoryDecisions(sortTree(clone(courses)), decisions);
@@ -523,7 +587,7 @@ export function createDemoApi(cfg) {
       const course = fullCourse(base);
       const decisions = db.story_decisions.filter((d) => d.student_id === student_id);
       const source = course.lessons.find((l) => l.materials.some((m) => m.id === material_id));
-      need(storyPathOpen(course, source, decisions, completedSections()) && Object.hasOwn(course.story_rules?.[material_id]?.options || {}, choice));
+      need(canOpen(course, source, decisions) && Object.hasOwn(course.story_rules?.[material_id]?.options || {}, choice));
       const existing = decisions.find((d) => d.course_id === course_id && d.material_id === material_id);
       if (existing) return wait(existing);
       const decision = { course_id, material_id, student_id, choice, predictions: clone(predictions), confirmed_at: nowIso() };
@@ -536,18 +600,123 @@ export function createDemoApi(cfg) {
       db.story_decisions = db.story_decisions.filter((d) => d.course_id !== course_id || d.student_id !== student_id);
       persist();
     },
-    saveCourse(o) { need(isTeacher()); return upsert(db.courses, o, 'c', FIELDS.courses); },
+    saveCourse(o) {
+      need(isTeacher());
+      if (Object.keys(o.story_rules || {}).length && db.enrollments.some((e) => e.course_id === o.id && e.access_mode === 'selected')) {
+        throw new Error('Switch all enrollments to Full access before enabling a story.');
+      }
+      return upsert(db.courses, o, 'c', FIELDS.courses);
+    },
+    async lessonCatalog(course, student) {
+      if (!isTeacher() && meRow()?.id !== student) return [];
+      const base = db.courses.find((c) => c.id === course);
+      const enrollment = enrollmentFor(course, student);
+      if (!base || !enrollment || !canSeeCourse(base)) return [];
+      const selected = enrollment.access_mode === 'selected';
+      const data = fullCourse(base);
+      const decisions = db.story_decisions.filter((d) => d.student_id === student);
+      const rows = data.lessons.flatMap((l) => {
+        const a = selected && db.lesson_assignments.find((x) => x.student_id === student && x.lesson_id === l.id);
+        if (selected && !a && !isTeacher()) return [];
+        if (!isTeacher() && !storyAllows(data, l, decisions)) return [];
+        const active = base.published && published(l) && db.profiles.some((p) => p.id === student && p.status === 'active');
+        return [{ id: l.id, module_id: l.module_id, title: l.title, sort: l.sort,
+          available_at: a?.available_at, prerequisite_lesson_id: a?.prerequisite_lesson_id,
+          completed: complete(l.id, student), state: selected && !a ? 'unassigned' : active ? releaseState(a, student) : 'hidden' }];
+      });
+      return wait(rows.sort((a, b) => a.sort - b.sort));
+    },
+    async changeLessonAccess({ course, students, add = [], remove = [], expected, mode, at = null, prerequisite = null, replace = false }) {
+      need(isTeacher());
+      if (mode === 'selected' && Object.keys(db.courses.find((c) => c.id === course)?.story_rules || {}).length) {
+        throw new Error('Story programs require Full access to preserve their routes.');
+      }
+      need(!add.includes(prerequisite) && [...add, ...remove].every((id) => db.lessons.some((l) => l.course_id === course && l.id === id)));
+      const next = clone(db.lesson_assignments);
+      const enrollments = students.map((student) => enrollmentFor(course, student));
+      for (const e of enrollments) {
+        need(e);
+        const before = e.access_mode || 'full';
+        if (expected && before !== expected) throw new Error('The access mode changed. Reopen Manage access and try again.');
+        if ((mode || before) === 'full' && !mode) continue;
+        if (mode === 'selected' && before === 'full' && db.courses.some((c) => c.id === course && c.published)
+          && db.profiles.some((p) => p.id === e.student_id && p.status === 'active')
+          && db.lessons.some((l) => l.course_id === course && published(l) && !add.includes(l.id) && !remove.includes(l.id))) {
+          throw new Error('Published lessons changed. Reopen Manage access and confirm the current list.');
+        }
+        const assigned = (a) => a.course_id === course && a.student_id === e.student_id;
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (assigned(next[i]) && ((mode && mode !== before) || remove.includes(next[i].lesson_id))) next.splice(i, 1);
+        }
+        if ((mode || before) === 'full') continue;
+        const find = (id) => next.find((a) => assigned(a) && a.lesson_id === id);
+        if (prerequisite && !find(prerequisite) && !complete(prerequisite, e.student_id)) {
+          throw new Error('Assign the prerequisite to each selected student first.');
+        }
+        for (const id of new Set(add)) {
+          const old = find(id);
+          if (old && !replace) continue;
+          if (replace && !old) throw new Error('The assignment was removed. Reopen Manage access and try again.');
+          const fields = { available_at: at, prerequisite_lesson_id: prerequisite };
+          if (old) Object.assign(old, fields);
+          else next.push({ course_id: course, student_id: e.student_id, lesson_id: id, ...fields });
+          for (let step = prerequisite; step; step = find(step)?.prerequisite_lesson_id) {
+            if (step === id) throw new Error('These prerequisites would create a circular release rule.');
+          }
+        }
+      }
+      db.lesson_assignments = next;
+      if (mode) enrollments.forEach((e) => { e.access_mode = mode; });
+      persist();
+    },
+    saveModule(o) { need(isTeacher()); return upsert(db.course_modules, o, 'mod', FIELDS.course_modules); },
+    async deleteModule(id) {
+      need(isTeacher());
+      db.course_modules = db.course_modules.filter((m) => m.id !== id);
+      db.lessons.filter((l) => l.module_id === id).forEach((l) => { l.module_id = null; });
+      persist();
+    },
+    async importLesson(lesson, materials) {
+      need(isTeacher());
+      const row = { id: id('l'), created_at: nowIso(), ...pick(lesson, FIELDS.lessons) };
+      db.lessons.push(row);
+      materials.forEach((m) => db.materials.push({ ...m, id: id('m'), lesson_id: row.id, created_at: nowIso() }));
+      persist();
+      return wait(row);
+    },
+    async reorderProgram(course, group, ids, modules = false) {
+      need(isTeacher());
+      const rows = (modules ? db.course_modules : db.lessons).filter((l) =>
+        l.course_id === course && (modules || (l.module_id || null) === group));
+      need(rows.length === ids.length && rows.every((l) => ids.includes(l.id)));
+      rows.forEach((l) => { l.sort = ids.indexOf(l.id); });
+      persist();
+    },
     async deleteCourse(cid) {
       need(isTeacher());
       const lids = db.lessons.filter((l) => l.course_id === cid).map((l) => l.id);
       db.materials = db.materials.filter((m) => !lids.includes(m.lesson_id));
       db.lessons = db.lessons.filter((l) => l.course_id !== cid);
       db.enrollments = db.enrollments.filter((e) => e.course_id !== cid);
+      db.course_modules = db.course_modules.filter((m) => m.course_id !== cid);
+      db.lesson_assignments = db.lesson_assignments.filter((a) => a.course_id !== cid);
       db.courses = db.courses.filter((c) => c.id !== cid); persist();
     },
-    saveLesson(o) { need(isTeacher()); return upsert(db.lessons, o, 'l', FIELDS.lessons); },
+    saveLesson(o) {
+      need(isTeacher());
+      const old = db.lessons.find((l) => l.id === o.id);
+      const module = o.module_id === undefined ? old?.module_id : o.module_id;
+      const course = o.course_id || old?.course_id;
+      need(!module || db.course_modules.some((m) => m.id === module && m.course_id === course));
+      if (old && course !== old.course_id && db.lesson_assignments.some((a) => a.lesson_id === old.id || a.prerequisite_lesson_id === old.id)) {
+        throw new Error('Clear individual assignments and prerequisite references before moving this lesson to another program.');
+      }
+      return upsert(db.lessons, o, 'l', FIELDS.lessons);
+    },
     async deleteLesson(lid) {
       need(isTeacher());
+      if (db.lesson_assignments.some((a) => a.prerequisite_lesson_id === lid)) throw new Error('Change the release settings that use this lesson as a prerequisite before deleting it.');
+      db.lesson_assignments = db.lesson_assignments.filter((a) => a.lesson_id !== lid);
       db.materials = db.materials.filter((m) => m.lesson_id !== lid);
       db.lessons = db.lessons.filter((l) => l.id !== lid);
       db.held_lessons.forEach((h) => { if (h.lesson_id === lid) h.lesson_id = null; });
@@ -567,8 +736,11 @@ export function createDemoApi(cfg) {
     async listEnrollments() { const me = meRow(); need(me); return wait(isTeacher() ? db.enrollments : db.enrollments.filter((e) => e.student_id === me.id)); },
     async setEnrollment(course_id, student_id, on) {
       need(isTeacher());
-      db.enrollments = db.enrollments.filter((e) => !(e.course_id === course_id && e.student_id === student_id));
-      if (on) db.enrollments.push({ course_id, student_id, created_at: nowIso() });
+      if (on && !enrollmentFor(course_id, student_id)) db.enrollments.push({ course_id, student_id, created_at: nowIso() });
+      if (!on) {
+        db.enrollments = db.enrollments.filter((e) => !(e.course_id === course_id && e.student_id === student_id));
+        db.lesson_assignments = db.lesson_assignments.filter((a) => !(a.course_id === course_id && a.student_id === student_id));
+      }
       persist();
     },
 
@@ -587,7 +759,7 @@ export function createDemoApi(cfg) {
       if (!isTeacher() && o.material_id) {
         const lesson = db.lessons.find((l) => l.id === db.materials.find((m) => m.id === o.material_id)?.lesson_id);
         const base = db.courses.find((c) => c.id === lesson?.course_id);
-        need(base && canSeeCourse(base) && storyPathOpen(fullCourse(base), lesson, db.story_decisions.filter((d) => d.student_id === me.id), completedSections()));
+        need(base && canSeeCourse(base) && canOpen(fullCourse(base), lesson, db.story_decisions.filter((d) => d.student_id === me.id)));
       }
       const row = { id: id('a'), student_id: me.id, status: 'in_progress', score: null, max_score: null, first_score: null, first_max: null, revealed: false, answers: [], seconds: 0, started_at: nowIso(), finished_at: null, feedback: null, feedback_at: null, feedback_seen: false, reviewed: false, ...pick(o, FIELDS.attempts) };
       if (!isTeacher()) { row.feedback = null; row.reviewed = false; }
@@ -599,7 +771,14 @@ export function createDemoApi(cfg) {
       const me = meRow(); need(me);
       const row = db.attempts.find((x) => x.id === aid); need(row && (isTeacher() || row.student_id === me.id));
       let p = pick(patch, FIELDS.attempts);
-      if (!isTeacher()) { delete p.feedback; delete p.feedback_at; delete p.reviewed; }
+      if (!isTeacher()) {
+        delete p.feedback; delete p.feedback_at; delete p.reviewed; delete p.material_id;
+        if (Object.keys(p).some((key) => key !== 'feedback_seen' && p[key] !== row[key])) {
+          const lesson = db.lessons.find((l) => l.id === db.materials.find((m) => m.id === row.material_id)?.lesson_id);
+          const base = db.courses.find((c) => c.id === lesson?.course_id);
+          need(base && canSeeCourse(base) && canOpen(fullCourse(base), lesson, db.story_decisions.filter((d) => d.student_id === me.id)));
+        }
+      }
       Object.assign(row, p, { updated_at: nowIso() }); persist();
       return wait(row);
     },
