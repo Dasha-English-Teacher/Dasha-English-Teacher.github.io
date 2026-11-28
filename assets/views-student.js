@@ -1,3 +1,4 @@
+import { availabilityText } from './program-management.js';
 import { hasStoryPreview, previewRoute, resetStoryPreview, storyPreviewCourse } from './story-preview.js';
 // Student pages: programs, lessons, schedule, words, results, profile and balance.
 import { html, icon, toast, openModal, nl2br, fmtDate, fmtDateLong, fmtTime, fmtDateTime, timeAgo, duration, pct, plural, sameDay, ask } from './ui.js';
@@ -44,6 +45,14 @@ export function agenda(sessions, opts = {}) {
     <ul class="sessions">${d.items.map((s) => (opts.row ? opts.row(s) : sessionRow(s, opts)))}</ul></section>`)}`;
 }
 
+function catalogStats(rows) {
+  return { total: rows.length, done: rows.filter((l) => l.completed).length };
+}
+
+function progressLabel({ done, total }) {
+  return `${done} of ${plural(total, 'lesson')} completed — ${pct(done, total)}%`;
+}
+
 // ---------- My programs (student home) ----------
 export async function programsView() {
   const now = Date.now();
@@ -55,6 +64,8 @@ export async function programsView() {
     S.api.listHeld({ student_id: S.me.id }).catch(() => []),
   ]);
   const idx = progressIndex(attempts);
+  const catalogs = new Map(await Promise.all(tree.filter((c) => !hasStoryPreview(c))
+    .map(async (c) => [c.id, await S.api.lessonCatalog(c.id, S.me.id)])));
   const next = sessions.find((s) => s.status === 'scheduled' && new Date(s.starts_at).getTime() + (s.minutes || 60) * 60000 > now);
   const unseen = attempts.filter((a) => a.feedback && !a.feedback_seen);
   const visible = new Set(tree.flatMap((c) => c.lessons.flatMap((l) => l.materials.map((m) => m.id))));
@@ -78,34 +89,48 @@ export async function programsView() {
       ${unseen.length ? html`<a class="feedback-alert" href="#result-${unseen[0].id}"><span class="dot"></span>${teacherName()} left feedback on ${unseen.length === 1 ? `"${unseen[0].material_title}"` : plural(unseen.length, 'exercise')}. <strong>Read it</strong></a>` : ''}
       ${cont ? html`<a class="continue" href="#play-${cont.material_id}">${icon('play')}<span>Continue <strong>${cont.material_title}</strong>${cont.score != null ? html` <span class="muted">(${scoreText(cont)})</span>` : ''}</span></a>` : ''}
       ${tree.length ? html`<ul class="course-list">${tree.map((c) => {
-        const st = courseStats(c, idx);
+        const st = catalogs.has(c.id) ? catalogStats(catalogs.get(c.id)) : courseStats(c, idx);
         return html`<li><a class="course-row" href="#program-${c.id}">
           ${tile(c)}
           <div class="course-main"><h2>${c.title}</h2>${c.level ? html`<span class="muted small">${c.level}</span>` : ''}
-            <div class="course-progress">${bar(st.done, st.total, `Lessons completed in ${c.title}`)}<span class="small">${st.done} of ${plural(st.total, 'lesson')} completed</span></div></div>
+            <div class="course-progress">${bar(st.done, st.total, `Lessons completed in ${c.title}`)}<span class="small">${progressLabel(st)}</span></div></div>
         </a></li>`;
       })}</ul>` : html`<div class="empty"><h2>No programs yet</h2><p>${teacherName()} will open a program for you soon. Your lessons and exercises will appear here.</p></div>`}`,
   };
 }
 
 // ---------- One program: its lessons ----------
-export async function programView({ id }) {
+export function moduleView({ id }) {
+  return programView({ moduleId: id });
+}
+
+export async function programView({ id, moduleId }) {
   const [tree, attempts] = await Promise.all([S.api.tree(), isTeacher() ? [] : S.api.listAttempts({ student_id: S.me.id })]);
-  let course = tree.find((c) => c.id === id);
+  let course = tree.find((c) => moduleId ? c.course_modules.some((m) => m.id === moduleId) : c.id === id);
   if (!course) return missing('This program is not available', 'programs');
   const teacher = isTeacher();
   const teacherId = S.me.id;
   const preview = teacher && hasStoryPreview(course);
   if (preview) course = storyPreviewCourse(course, teacherId);
   const idx = progressIndex(attempts);
-  const st = courseStats(course, idx);
+  const module = course.course_modules.find((m) => m.id === moduleId);
+  if (moduleId && !module) return missing('This module is not available', `program-${course.id}`);
+  const story = hasStoryPreview(course);
+  const catalog = !teacher && !story ? await S.api.lessonCatalog(course.id, S.me.id) : null;
+  const moduleRows = (id) => catalog ? catalog.filter((l) => (l.module_id || null) === id) : course.lessons
+    .filter((l) => (l.module_id || null) === id).map((l) => ({ ...l, completed: lessonDone(l, idx), state: 'available' }));
+  const st = module ? catalogStats(moduleRows(module.id)) : catalog ? catalogStats(catalog) : courseStats(course, idx);
+  const completedLessons = catalog ? new Set(catalog.filter((l) => l.completed).map((l) => l.id)) : null;
+  const lessons = course.lessons.filter((l) => (l.module_id || null) === (module?.id || null));
+  const upcoming = moduleRows(module?.id || null).filter((l) => l.state === 'scheduled' || l.state === 'waiting');
+  const heading = module || course;
   let q = '';
 
   const card = (l, i) => {
     const total = l.materials.length;
     const done = teacher ? 0 : l.materials.filter((m) => sectionDone(m, idx)).length;
     const started = !teacher && l.materials.some((m) => m.decision || (!m.story?.only && idx.get(m.id)));
-    const finished = !teacher && lessonDone(l, idx);
+    const finished = !teacher && (completedLessons ? completedLessons.has(l.id) : lessonDone(l, idx));
     const state = finished ? 'done' : started ? 'started' : '';
     return html`<li data-title="${l.title.toLowerCase()}"><a class="lesson-card ${state ? `is-${state}` : ''}" href="#${preview ? previewRoute(course.id, 'lesson', l.id) : `lesson-${l.id}`}">
       <span class="lesson-tile" aria-hidden="true">${i + 1}</span>
@@ -117,19 +142,33 @@ export async function programView({ id }) {
   };
 
   return {
-    title: course.title,
+    title: heading.title,
     html: html`
-      <nav class="crumbs"><a href="#programs">${teacher ? 'Programs' : 'My programs'}</a></nav>
-      <div class="page-head with-tile">${tile(course, 'tile-lg')}<div><h1>${course.title}</h1>${course.description ? html`<p class="lede">${course.description}</p>` : ''}</div></div>
+      <nav class="crumbs"><a href="#programs">${teacher ? 'Programs' : 'My programs'}</a>${module ? html` <a href="#program-${course.id}">${course.title}</a>` : ''}</nav>
+      <div class="page-head with-tile">${tile(heading, 'tile-lg')}<div><h1>${heading.title}</h1>${heading.description ? html`<p class="lede">${heading.description}</p>` : ''}</div></div>
       ${preview ? html`<div class="notice">
         <p>Student view. Story choices are saved in this browser. <a href="#edit-program-${course.id}">Edit this program</a></p>
         <button class="btn btn-sm" data-on="reset-story-preview">Reset story preview</button>
       </div>` : teacher ? html`<p class="notice small">This is what students see. <a href="#edit-program-${course.id}">Edit this program</a></p>` : html`
-        <div class="course-progress wide">${bar(st.done, st.total)}<span>${st.done} of ${plural(st.total, 'lesson')} completed</span></div>`}
-      ${course.lessons.length > 6 ? html`<input type="search" class="search-wide" placeholder="Search lessons" data-input="q" aria-label="Search lessons">` : ''}
-      ${course.lessons.length ? html`<ol class="lesson-cards" style="--prog:${course.color || '#1f4fd1'}">${course.lessons.map(card)}</ol>
-        <p class="muted small empty-sm" id="no-lessons" hidden>No lessons match.</p>`
-        : html`<div class="empty"><p>No lessons in this program yet.</p></div>`}`,
+        <div class="course-progress wide">${bar(st.done, st.total)}<span>${progressLabel(st)}</span></div>`}
+      ${!module && course.course_modules.length ? html`<ul class="program-modules">${course.course_modules.map((m) => {
+        const rows = moduleRows(m.id);
+        const stats = catalogStats(rows);
+        return html`<li><a class="course-row module-card" href="#module-${m.id}">
+          ${tile(m)}<div class="course-main"><h2>${m.title}</h2>
+          ${m.description ? html`<p class="muted small">${m.description}</p>` : ''}
+          <span class="small">${plural(stats.total, 'assigned lesson')}</span>
+          <div class="course-progress">${bar(stats.done, stats.total, `Lessons completed in ${m.title}`)}<span class="small">${progressLabel(stats)}</span></div></div>
+        </a></li>`;
+      })}</ul>` : ''}
+      ${!module && course.course_modules.length && (lessons.length || upcoming.length) ? html`<h2 class="section-title">Ungrouped lessons</h2>` : ''}
+      ${lessons.length > 6 ? html`<input type="search" class="search-wide" placeholder="Search lessons" data-input="q" aria-label="Search lessons">` : ''}
+      ${lessons.length ? html`<ol class="lesson-cards" style="--prog:${course.color || '#1f4fd1'}">${lessons.map(card)}</ol>
+        <p class="muted small empty-sm" id="no-lessons" hidden>No lessons match.</p>` : ''}
+      ${upcoming.length ? html`<section><h2 class="section-title">Upcoming lessons</h2><ul class="lesson-cards">${upcoming.map((l) =>
+        html`<li class="upcoming-lesson"><strong>${l.title}</strong><span class="muted small">${availabilityText(l)}${l.completed ? ' · Completed previously' : ''}</span></li>`)}</ul></section>` : ''}
+      ${!lessons.length && !upcoming.length && (module || !course.course_modules.length)
+        ? html`<div class="empty"><p>No lessons are available here yet.</p></div>` : ''}`,
     on: preview ? {
       'reset-story-preview'() {
         if (!isTeacher() || S.api.me?.id !== teacherId) return;
@@ -141,7 +180,7 @@ export async function programView({ id }) {
       q(el) {
         q = el.value.trim().toLowerCase();
         let shown = 0;
-        document.querySelectorAll('.lesson-cards > li').forEach((li) => { const ok = !q || li.dataset.title.includes(q); li.hidden = !ok; if (ok) shown += 1; });
+        document.querySelectorAll('.lesson-cards > li[data-title]').forEach((li) => { const ok = !q || li.dataset.title.includes(q); li.hidden = !ok; if (ok) shown += 1; });
         const none = document.getElementById('no-lessons');
         if (none) none.hidden = shown > 0;
       },

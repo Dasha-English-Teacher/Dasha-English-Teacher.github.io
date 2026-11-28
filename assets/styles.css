@@ -820,3 +820,36 @@ input.is-readonly { background: var(--paper); color: var(--ink-2); }
   .room-side .side-lesson { display: none; }
   .room-prog .ring { display: none; }
 }
+
+/* Program modules, lesson access and the shared icon picker. */
+.icon-picker-list { max-height: 19rem; overflow: auto; padding: .25rem; }
+.icon-picker-list h3 { font-size: var(--fs-sm); margin: .8rem 0 .3rem; }
+.icon-picker-list .btn { min-width: 2.75rem; min-height: 2.75rem; padding: .25rem; }
+.icon-picker details > label { margin-top: .5rem; }
+.icon-picker summary, .access-group summary, .program-module-editor summary { cursor: pointer; padding: .65rem 0; }
+.icon-picker [hidden], .access-row[hidden], .access-group[hidden], [data-release][hidden], [data-access-preview][hidden] { display: none; }
+.access-program-actions { flex-wrap: wrap; }
+.access-group, .program-module-editor { border: 1px solid var(--rule); border-radius: var(--r-panel); padding: .25rem .75rem .65rem; }
+.program-module-editor { margin: .75rem 0; min-width: 0; }
+.program-lesson-actions, .module-tools { margin: .55rem 0; flex-wrap: wrap; }
+.program-lesson-actions { padding-inline: .75rem; }
+.access-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; padding: .6rem 0; border-bottom: 1px solid var(--rule); }
+.access-row.check { justify-content: flex-start; }
+.access-status { display: block; }
+.access-row .check, .access-row > span { min-width: 0; overflow-wrap: anywhere; }
+.program-modules { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: .8rem; }
+.module-card { height: 100%; align-items: start; }
+.module-card .course-progress { flex-wrap: wrap; }
+.upcoming-lesson { padding: .85rem; border: 1px solid var(--rule); border-radius: var(--r-panel); background: var(--surface); }
+.upcoming-lesson span { display: block; }
+
+@media (max-width: 520px) {
+  .ed-lesson-head > .ed-tools, .ed-materials li > .ed-tools {
+    flex: 0 1 100%;
+    flex-wrap: wrap;
+    margin-left: 0;
+  }
+  .ed-materials li { flex-wrap: wrap; }
+  .ed-materials { margin-left: 0; }
+  .access-program-actions { justify-content: flex-end; }
+}

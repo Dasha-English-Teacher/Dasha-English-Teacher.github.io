@@ -326,7 +326,7 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
       ${!teacher && !completion && !sent && pending.length ? html`<p class="notice small">Not finished yet: ${pending.map((m) => m.title).join(', ')}. ${pending.length === 1 ? 'It is' : 'They are'} sent as ${pending.length === 1 ? 'it is' : 'they are'}.</p>` : ''}
       ${(!teacher || preview) && ending && !next ? html`<p class="notice">${ending.decision ? STORY_PENDING : html`<a href="#${route('play', ending.id)}">Choose what happens next to continue your story.</a>`}</p>` : ''}
       <div class="row-end finish-actions">
-        <a class="btn" href="#program-${course.id}">All lessons</a>
+        <a class="btn" href="#${lesson.module_id ? `module-${lesson.module_id}` : `program-${course.id}`}">All lessons</a>
         ${next && (teacher || sent) ? html`<a class="btn ${sent || teacher ? 'btn-primary' : ''}" href="#${route('lesson', next.id)}">Next lesson: ${next.title} ${icon('next')}</a>` : ''}
         ${!teacher && !sent ? html`<button class="btn btn-primary" data-on="finish-lesson">${icon('flag')} Finish lesson</button>` : ''}
       </div>
@@ -412,7 +412,7 @@ async function room({ lessonId, materialId, finish = false, previewId }) {
     html: html`
       <div class="room" style="--prog:${course.color || '#1f4fd1'};--prog-action:${accessibleActionColor(course.color || '#1f4fd1')}">
         <header class="room-bar">
-          <a class="btn btn-sm room-back" aria-label="All lessons" href="#program-${course.id}">${icon('back')}<span>All lessons</span></a>
+          <a class="btn btn-sm room-back" aria-label="All lessons" href="#${lesson.module_id ? `module-${lesson.module_id}` : `program-${course.id}`}">${icon('back')}<span>All lessons</span></a>
           <div class="room-prog" id="room-prog">${progressBlock()}</div>
           <span class="room-course hide-sm">${course.title}</span>
           ${teacher ? html`<a class="btn btn-sm hide-sm" href="#edit-program-${course.id}">${icon('edit')} Edit</a>` : ''}

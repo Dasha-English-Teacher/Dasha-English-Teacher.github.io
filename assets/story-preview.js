@@ -21,7 +21,13 @@ export function hasStoryPreview(course) {
   return Object.keys(course?.story_rules || {}).length > 0;
 }
 
+function publishedModules(course) {
+  const course_modules = (course.course_modules || []).filter((m) => m.published);
+  return { ...course, course_modules, lessons: course.lessons.filter((l) => !l.module_id || course_modules.some((m) => m.id === l.module_id)) };
+}
+
 export function storyPreviewCourse(course, teacherId) {
+  course = publishedModules(course);
   const decisions = readDecisions(teacherId, course.id);
   const preview = {
     ...course,
@@ -32,6 +38,7 @@ export function storyPreviewCourse(course, teacherId) {
 }
 
 export function confirmPreviewDecision(course, teacherId, materialId, choice, predictions) {
+  course = publishedModules(course);
   const decisions = readDecisions(teacherId, course.id);
   const source = course.lessons.find((lesson) => lesson.materials.some((material) => material.id === materialId));
   if (!storyPathOpen(course, source, decisions, completed(teacherId, course.id)) || !Object.hasOwn(course.story_rules?.[materialId]?.options || {}, choice)) {

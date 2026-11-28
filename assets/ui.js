@@ -166,12 +166,14 @@ export function showError(err) {
 
 // ---------- dialogs ----------
 let modalStack = [];
+let modalCount = 0;
 
 export function openModal({ title, body, on = {}, submit = {}, change = {}, input = {}, wide = false, onClose } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'modal-backdrop';
-  wrap.innerHTML = `<div class="modal${wide ? ' modal-wide' : ''}" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <div class="modal-head"><h2 id="modal-title">${esc(title || '')}</h2>
+  const titleId = `modal-title-${++modalCount}`;
+  wrap.innerHTML = `<div class="modal${wide ? ' modal-wide' : ''}" role="dialog" aria-modal="true" aria-labelledby="${titleId}">
+      <div class="modal-head"><h2 id="${titleId}">${esc(title || '')}</h2>
       <button class="icon-btn" data-on="close" aria-label="Close">${icon('close')}</button></div>
       <div class="modal-body">${piece(body)}</div></div>`;
   const prevFocus = document.activeElement;

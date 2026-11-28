@@ -17,7 +17,8 @@ export function invalidateNav() { S.nav = null; navLoading = null; }
 // Any change to programs, lessons or sections makes the cached menu data
 // (program list, kinds of sections) out of date.
 export function trackTreeChanges(api) {
-  for (const k of ['saveCourse', 'deleteCourse', 'saveLesson', 'deleteLesson', 'saveMaterial', 'deleteMaterial']) {
+  for (const k of ['saveCourse', 'deleteCourse', 'saveModule', 'deleteModule', 'saveLesson', 'deleteLesson',
+    'importLesson', 'reorderProgram', 'changeLessonAccess', 'saveMaterial', 'deleteMaterial']) {
     const f = api[k];
     if (typeof f === 'function') api[k] = async (...args) => { const r = await f.apply(api, args); invalidateNav(); return r; };
   }

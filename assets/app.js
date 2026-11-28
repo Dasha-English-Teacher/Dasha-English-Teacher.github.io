@@ -12,7 +12,7 @@ const ROUTES = {
   public: { home: pub.homeView, book: pub.bookView, pay: bill.payView, login: pub.loginView, signup: pub.signupView, join: pub.joinView },
   waiting: { home: pub.homeView, book: pub.bookView, pay: bill.payView, account: pub.waitingView },
   student: {
-    programs: stu.programsView, program: stu.programView, lesson: room.lessonRoom, play: room.playRoom, finish: room.finishRoom,
+    programs: stu.programsView, program: stu.programView, module: stu.moduleView, lesson: room.lessonRoom, play: room.playRoom, finish: room.finishRoom,
     schedule: stu.scheduleView, words: stu.wordsView, results: stu.resultsView, result: stu.resultView,
     'my-profile': stu.profileView, pay: bill.payView, book: pub.bookView, home: pub.homeView,
   },
@@ -22,7 +22,7 @@ const ROUTES = {
     reviews: tea.reviewsView, review: tea.reviewView, calendar: tea.calendarView, requests: tea.requestsView,
     'site-setup': tea.siteSetupView, 'my-profile': stu.profileView,
     'preview-lesson': room.storyPreviewRoom, 'preview-play': room.storyPreviewRoom, 'preview-finish': room.storyPreviewRoom,
-    program: stu.programView, lesson: room.lessonRoom, play: room.playRoom, finish: room.finishRoom, book: pub.bookView, pay: bill.payView, home: pub.homeView,
+    program: stu.programView, module: stu.moduleView, lesson: room.lessonRoom, play: room.playRoom, finish: room.finishRoom, book: pub.bookView, pay: bill.payView, home: pub.homeView,
   },
 };
 // Old addresses (before "classes" were renamed "programs") keep working.
@@ -32,7 +32,7 @@ const KNOWN = [...new Set([...Object.values(ROUTES).flatMap((r) => Object.keys(r
 
 const NAV = {
   student: [
-    ['programs', 'My programs', 'book', ['program', 'lesson', 'play', 'finish']],
+    ['programs', 'My programs', 'book', ['program', 'module', 'lesson', 'play', 'finish']],
     ['schedule', 'Schedule', 'calendar'],
     ['results', 'Results', 'star', ['result']],
     ['words', 'My words', 'words'],
@@ -41,7 +41,7 @@ const NAV = {
   teacher: [
     ['today', 'Today', 'home'],
     ['students', 'Students', 'users', ['student']],
-    ['programs', 'Programs', 'book', ['edit-program', 'program', 'lesson', 'play', 'finish']],
+    ['programs', 'Programs', 'book', ['edit-program', 'program', 'module', 'lesson', 'play', 'finish']],
     ['reviews', 'Results', 'check', ['review']],
     ['payments', 'Payments', 'wallet'],
     ['calendar', 'Calendar', 'calendar'],
